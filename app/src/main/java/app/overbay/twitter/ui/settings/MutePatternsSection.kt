@@ -10,9 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
@@ -26,11 +23,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import app.overbay.twitter.model.TwitterModConfig
 
 /**
- * Interactive mute list editor supporting keywords, #hashtags, domains, and /regex/flags.
+ * Interactive mute list editor supporting keywords, #hashtags, domains, and validated /regex/flags.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -41,11 +40,14 @@ fun MutePatternsSection(
     modifier: Modifier = Modifier
 ) {
     var draft by remember { mutableStateOf("") }
+    val validationError = remember(draft) {
+        if (draft.isBlank()) null else TwitterModConfig.validateMutePattern(draft)
+    }
+    val canSubmit = draft.isNotBlank() && validationError == null
 
     fun submitDraft() {
-        val trimmed = draft.trim()
-        if (trimmed.isNotEmpty()) {
-            onAddPattern(trimmed)
+        if (canSubmit) {
+            onAddPattern(draft.trim())
             draft = ""
         }
     }
@@ -57,7 +59,7 @@ fun MutePatternsSection(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
-            text = "Enforced at the GraphQL layer across tweets, URLs, and nested quote-tweets. Supports plain text, domains, or /regex/i.",
+            text = "Enforced at the GraphQL layer across tweets, URLs, and nested quote-tweets. Supports plain text, @handles, domains, or /regex/i.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -65,22 +67,25 @@ fun MutePatternsSection(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
             OutlinedTextField(
                 value = draft,
                 onValueChange = { draft = it },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
+                isError = validationError != null,
                 placeholder = { Text("word, domain.com, or /pattern/i") },
+                supportingText = validationError?.let { err -> { Text(err) } },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { submitDraft() })
             )
             FilledTonalIconButton(
                 onClick = { submitDraft() },
-                enabled = draft.isNotBlank()
+                enabled = canSubmit,
+                modifier = Modifier.padding(top = 4.dp)
             ) {
-                Icon(Icons.Rounded.Add, contentDescription = "Add mute pattern")
+                Icon(AppIcons.Add, contentDescription = "Add mute pattern")
             }
         }
 
@@ -97,13 +102,19 @@ fun MutePatternsSection(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 patterns.forEach { pattern ->
+                    val isRegex = pattern.startsWith("/") && pattern.lastIndexOf('/') > 0
                     InputChip(
                         selected = true,
                         onClick = { onRemovePattern(pattern) },
-                        label = { Text(pattern) },
+                        label = {
+                            Text(
+                                text = pattern,
+                                fontFamily = if (isRegex) FontFamily.Monospace else FontFamily.Default
+                            )
+                        },
                         trailingIcon = {
                             Icon(
-                                imageVector = Icons.Rounded.Close,
+                                imageVector = AppIcons.Close,
                                 contentDescription = "Remove $pattern",
                                 modifier = Modifier.size(16.dp)
                             )

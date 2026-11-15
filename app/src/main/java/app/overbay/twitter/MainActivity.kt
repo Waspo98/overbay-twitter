@@ -14,7 +14,6 @@ import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import app.overbay.twitter.model.TwitterConfigRepository
 import app.overbay.twitter.ui.TwitterAppScreen
-import app.overbay.twitter.ui.theme.TwitterTheme
 import app.overbay.twitter.webview.TwitterRequestBlocker
 
 /**
@@ -33,14 +32,14 @@ class MainActivity : ComponentActivity() {
         splashScreen.setOnExitAnimationListener { splashView ->
             val interpolator = DecelerateInterpolator()
             runCatching { splashView.iconView }.getOrNull()?.animate()
-                ?.scaleX(1.1f)
-                ?.scaleY(1.1f)
-                ?.setDuration(180L)
+                ?.scaleX(1.08f)
+                ?.scaleY(1.08f)
+                ?.setDuration(160L)
                 ?.setInterpolator(interpolator)
                 ?.start()
             splashView.view.animate()
                 .alpha(0f)
-                .setDuration(180L)
+                .setDuration(160L)
                 .setInterpolator(interpolator)
                 .withEndAction { splashView.remove() }
                 .start()
@@ -53,17 +52,15 @@ class MainActivity : ComponentActivity() {
         )
 
         handleIncomingIntent(intent)
-        val repository = TwitterConfigRepository(this)
+        val repository = TwitterConfigRepository.getInstance(this)
 
         setContent {
-            TwitterTheme {
-                TwitterAppScreen(
-                    repository = repository,
-                    deepLinkUrl = deepLinkUrl,
-                    onDeepLinkConsumed = { deepLinkUrl = null },
-                    onFirstLoadComplete = { isWebViewReady = true }
-                )
-            }
+            TwitterAppScreen(
+                repository = repository,
+                deepLinkUrl = deepLinkUrl,
+                onDeepLinkConsumed = { deepLinkUrl = null },
+                onFirstLoadComplete = { isWebViewReady = true }
+            )
         }
     }
 
@@ -75,12 +72,14 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIncomingIntent(intent: Intent?) {
         val uri = intent?.data ?: return
-        val host = uri.host?.lowercase().orEmpty()
+        val host = uri.host.orEmpty()
         if (uri.scheme == "https" && TwitterRequestBlocker.isInternalTwitterHost(host)) {
-            deepLinkUrl = uri.toString().replace(
-                Regex("^https://(?:www\\.|mobile\\.)?twitter\\.com", RegexOption.IGNORE_CASE),
-                "https://x.com"
-            )
+            deepLinkUrl = uri.toString().replace(TWITTER_HOST_PREFIX_REGEX, "https://x.com")
         }
+    }
+
+    companion object {
+        private val TWITTER_HOST_PREFIX_REGEX =
+            Regex("^https://(?:www\\.|mobile\\.)?twitter\\.com", RegexOption.IGNORE_CASE)
     }
 }

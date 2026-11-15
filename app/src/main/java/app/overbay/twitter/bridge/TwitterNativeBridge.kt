@@ -1,6 +1,7 @@
 package app.overbay.twitter.bridge
 
 import android.content.Context
+import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
@@ -12,7 +13,10 @@ import android.widget.Toast
 class TwitterNativeBridge(
     private val context: Context,
     private val onOpenSettings: () -> Unit,
-    private val onShowLinkActions: (String) -> Unit
+    private val onShowLinkActions: (String) -> Unit,
+    private val onPullToRefreshModalChange: (Boolean) -> Unit = {},
+    private val onReportHomeFeeds: (String) -> Unit = {},
+    private val onThemeColorChange: (Int) -> Unit = {}
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -54,5 +58,23 @@ class TwitterNativeBridge(
         mainHandler.post {
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    @JavascriptInterface
+    fun setPullToRefreshModalOpen(open: Boolean) {
+        mainHandler.post { onPullToRefreshModalChange(open) }
+    }
+
+    @JavascriptInterface
+    fun reportHomeFeeds(feedsJson: String) {
+        if (feedsJson.isBlank()) return
+        mainHandler.post { onReportHomeFeeds(feedsJson) }
+    }
+
+    @JavascriptInterface
+    fun onThemeColorChanged(hexColor: String) {
+        if (hexColor.length != 7 || hexColor[0] != '#') return
+        val parsed = runCatching { Color.parseColor(hexColor) }.getOrNull() ?: return
+        mainHandler.post { onThemeColorChange(parsed) }
     }
 }

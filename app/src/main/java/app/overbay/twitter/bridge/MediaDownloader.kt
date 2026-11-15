@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Environment
 import android.webkit.CookieManager
 import android.webkit.MimeTypeMap
+import androidx.core.net.toUri
 
 /**
  * Enqueues video, GIF, and original-resolution image downloads through Android DownloadManager.
@@ -14,9 +15,10 @@ import android.webkit.MimeTypeMap
 object MediaDownloader {
 
     private val allowedHosts = setOf("video.twimg.com", "pbs.twimg.com", "ton.twimg.com")
+    private val knownFormats = setOf("mp4", "png", "webp", "gif", "jpg", "jpeg")
 
     fun enqueue(context: Context, rawUrl: String, filenameHint: String): Result<Long> {
-        val uri = runCatching { Uri.parse(rawUrl) }.getOrNull()
+        val uri = runCatching { rawUrl.toUri() }.getOrNull()
             ?: return Result.failure(IllegalArgumentException("Invalid media URL"))
         val host = uri.host?.lowercase().orEmpty()
         if (uri.scheme != "https" || allowedHosts.none { host == it || host.endsWith(".$it") }) {
@@ -57,12 +59,16 @@ object MediaDownloader {
     }
 
     private fun sanitizeFilename(hint: String, uri: Uri): String {
+        val queryFmt = uri.getQueryParameter("format")?.lowercase()
+        val pathSeg = uri.lastPathSegment?.lowercase().orEmpty()
         val fallbackExt = when {
-            uri.path?.contains(".mp4", ignoreCase = true) == true -> "mp4"
-            uri.getQueryParameter("format") == "png" -> "png"
+            pathSeg.endsWith(".mp4") -> "mp4"
+            queryFmt != null && queryFmt in knownFormats -> if (queryFmt == "jpeg") "jpg" else queryFmt
+            pathSeg.endsWith(".png") -> "png"
+            pathSeg.endsWith(".webp") -> "webp"
             else -> "jpg"
         }
-        val cleaned = hint.trim().replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val cleaned = hint.trim().replace(UNSAFE_FILENAME_REGEX, "_")
         val base = cleaned.ifBlank { "twitter_${System.currentTimeMillis()}.$fallbackExt" }
         return if (base.contains('.')) base else "$base.$fallbackExt"
     }
@@ -72,7 +78,11 @@ object MediaDownloader {
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: when (ext) {
             "mp4" -> "video/mp4"
             "png" -> "image/png"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
             else -> "image/jpeg"
         }
     }
+
+    private val UNSAFE_FILENAME_REGEX = Regex("[^A-Za-z0-9._-]")
 }

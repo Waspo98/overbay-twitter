@@ -1,58 +1,186 @@
 package app.overbay.twitter.webview
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.webkit.WebResourceResponse
 import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.core.net.toUri
 import java.io.ByteArrayInputStream
-import java.net.URI
 
 /**
- * Network-layer ad/telemetry filter and external link router for Twitter WebView.
+ * Zero-allocation network-layer ad/telemetry filter and external link router for Twitter WebView.
  */
 object TwitterRequestBlocker {
 
-    private val blockedHosts = setOf(
+    private val blockedHosts = arrayOf(
         "ads-twitter.com",
+        "ads.twitter.com",
+        "ads.x.com",
         "ads-api.twitter.com",
         "static.ads-twitter.com",
         "analytics.twitter.com",
+        "analytics.x.com",
         "pixel.twitter.com",
         "scribe.twitter.com"
     )
 
-    private val blockedPathFragments = listOf(
+    private val fastPassCdnDomains = arrayOf(
+        "twimg.com"
+    )
+
+    private val blockedPathFragments = arrayOf(
         "/i/api/1.1/jot/",
         "/1.1/jot/",
         "/i/adsct",
         "/ClientEvent"
     )
 
-    private val internalHosts = setOf(
+    private val internalHosts = arrayOf(
         "x.com",
         "twitter.com"
     )
 
+    private val trackingQueryParams = setOf(
+        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
+        "fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "igsh",
+        "_hsenc", "_hsmi", "vero_id", "mkt_tok"
+    )
+
+    private val mobileBeforeSafariRegex = Regex("""\s+Mobile(?=\s+Safari/)""")
+    private val mobileWordRegex = Regex("""\bMobile\b""")
+
+    /**
+     * Evaluates telemetry/ad URLs on Chromium's IO thread without allocating URI or substring objects.
+     */
     fun shouldBlockTelemetryOrAd(urlString: String): Boolean {
-        val uri = runCatching { URI.create(urlString) }.getOrNull() ?: return false
-        val host = uri.host?.lowercase().orEmpty()
-        if (isBlockedHost(host)) {
-            return true
+        val schemeSep = urlString.indexOf("://")
+        if (schemeSep <= 0) return false
+        val hostStart = schemeSep + 3
+        val len = urlString.length
+        if (hostStart >= len) return false
+
+        var pathStart = len
+        var pathEnd = len
+        for (i in hostStart until len) {
+            val ch = urlString[i]
+            if (ch == '/' && pathStart == len) {
+                pathStart = i
+            } else if (ch == '?' || ch == '#') {
+                pathEnd = i
+                if (pathStart == len) pathStart = i
+                break
+            }
         }
-        val path = uri.rawPath.orEmpty()
-        return blockedPathFragments.any { path.contains(it, ignoreCase = true) }
+
+        var hostEnd = pathStart
+        for (i in hostStart until pathStart) {
+            if (urlString[i] == ':') {
+                hostEnd = i
+                break
+            }
+        }
+        if (hostEnd <= hostStart) return false
+
+        for (cdn in fastPassCdnDomains) {
+            if (regionMatchesDomain(urlString, hostStart, hostEnd, cdn)) return false
+        }
+        for (blocked in blockedHosts) {
+            if (regionMatchesDomain(urlString, hostStart, hostEnd, blocked)) return true
+        }
+
+        val pathLen = pathEnd - pathStart
+        if (pathLen <= 1) return false
+        for (frag in blockedPathFragments) {
+            val idx = urlString.indexOf(frag, startIndex = pathStart, ignoreCase = true)
+            if (idx >= pathStart && idx + frag.length <= pathEnd) return true
+        }
+        return false
     }
 
     fun isBlockedHost(host: String): Boolean {
-        val normalized = host.lowercase()
-        return blockedHosts.any { normalized == it || normalized.endsWith(".$it") }
+        if (host.isEmpty()) return false
+        return blockedHosts.any { regionMatchesDomain(host, 0, host.length, it) }
     }
 
     fun isInternalTwitterHost(host: String): Boolean {
-        val normalized = host.lowercase()
-        return internalHosts.any { normalized == it || normalized.endsWith(".$it") }
+        if (host.isEmpty() || isBlockedHost(host)) return false
+        return internalHosts.any { regionMatchesDomain(host, 0, host.length, it) }
+    }
+
+    private fun regionMatchesDomain(
+        text: String,
+        start: Int,
+        end: Int,
+        domain: String
+    ): Boolean {
+        val hostLen = end - start
+        val domLen = domain.length
+        if (hostLen < domLen) return false
+        if (hostLen == domLen) {
+            return text.regionMatches(start, domain, 0, domLen, ignoreCase = true)
+        }
+        val dotIndex = end - domLen - 1
+        return text[dotIndex] == '.' &&
+            text.regionMatches(dotIndex + 1, domain, 0, domLen, ignoreCase = true)
+    }
+
+    fun cleanTrackingUrl(rawUrl: String): String {
+        val trimmed = rawUrl.trim()
+        val qIndex = trimmed.indexOf('?')
+        if (qIndex < 0) return trimmed
+        val hashIndex = trimmed.indexOf('#')
+        if (hashIndex in 0 until qIndex) return trimmed
+
+        val queryEnd = if (hashIndex > qIndex) hashIndex else trimmed.length
+        val rawPairs = trimmed.substring(qIndex + 1, queryEnd).split('&')
+        val kept = rawPairs.filter { pair ->
+            pair.isNotEmpty() && pair.substringBefore('=').lowercase() !in trackingQueryParams
+        }
+        if (kept.size == rawPairs.size) return trimmed
+
+        val base = trimmed.substring(0, qIndex)
+        val fragment = if (hashIndex > qIndex) trimmed.substring(hashIndex) else ""
+        return if (kept.isEmpty()) {
+            "$base$fragment"
+        } else {
+            "$base?${kept.joinToString("&")}$fragment"
+        }
+    }
+
+    fun normalizeAcceptTypes(
+        acceptTypes: Array<String>?,
+        extToMime: (String) -> String?
+    ): Array<String> {
+        val normalized = acceptTypes.orEmpty()
+            .flatMap { it.split(',') }
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .mapNotNull { token ->
+                when {
+                    token.startsWith(".") -> extToMime(token.removePrefix(".").lowercase())
+                    token.contains('/') -> token
+                    else -> null
+                }
+            }
+            .distinct()
+        return if (normalized.isNotEmpty()) normalized.toTypedArray() else arrayOf("image/*", "video/*")
+    }
+
+    fun buildEffectiveUserAgent(baseUserAgent: String, isFullyUnfolded: Boolean): String {
+        val cleaned = baseUserAgent
+            .replace("; wv", "")
+            .replace("Version/4.0 ", "")
+        return if (isFullyUnfolded) {
+            cleaned.replace(mobileBeforeSafariRegex, "")
+        } else if (mobileWordRegex.containsMatchIn(cleaned)) {
+            cleaned
+        } else if (cleaned.contains("Safari/")) {
+            cleaned.replaceFirst("Safari/", "Mobile Safari/")
+        } else {
+            "$cleaned Mobile"
+        }
     }
 
     fun emptyJsonResponse(): WebResourceResponse {
@@ -61,8 +189,8 @@ object TwitterRequestBlocker {
             "UTF-8",
             204,
             "No Content",
-            emptyMap(),
-            ByteArrayInputStream(ByteArray(0))
+            mapOf("Access-Control-Allow-Origin" to "*"),
+            ByteArrayInputStream(EMPTY_BYTES)
         )
     }
 
@@ -72,12 +200,13 @@ object TwitterRequestBlocker {
         useCustomTab: Boolean,
         openInArchiveToday: Boolean = false
     ) {
+        val cleaned = cleanTrackingUrl(rawUrl)
         val target = if (openInArchiveToday) {
-            "https://archive.ph/newest/$rawUrl"
+            "https://archive.ph/newest/${cleaned.substringBefore('#')}"
         } else {
-            rawUrl
+            cleaned
         }
-        val uri = runCatching { Uri.parse(target) }.getOrNull() ?: return
+        val uri = runCatching { target.toUri() }.getOrNull() ?: return
 
         if (useCustomTab) {
             val launched = runCatching {
@@ -95,9 +224,13 @@ object TwitterRequestBlocker {
 
         runCatching {
             val viewIntent = Intent(Intent.ACTION_VIEW, uri).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                if (context !is Activity) {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
             }
             context.startActivity(viewIntent)
         }
     }
+
+    private val EMPTY_BYTES = ByteArray(0)
 }

@@ -8,20 +8,14 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
-// Configuration-cache safe branch detection via direct .git/HEAD inspection
-val gitBranch = runCatching {
-    val headFile = rootProject.file(".git/HEAD")
-    if (headFile.exists()) {
-        val line = headFile.readText().lines().firstOrNull()?.trim() ?: ""
-        if (line.startsWith("ref: refs/heads/")) {
-            line.removePrefix("ref: refs/heads/")
-        } else {
-            line
-        }
-    } else {
-        ""
+// Configuration-cache safe branch detection via tracked .git/HEAD input
+val gitBranch = providers.fileContents(rootProject.layout.projectDirectory.file(".git/HEAD"))
+    .asText
+    .map { text ->
+        val line = text.lines().firstOrNull()?.trim().orEmpty()
+        if (line.startsWith("ref: refs/heads/")) line.removePrefix("ref: refs/heads/") else line
     }
-}.getOrDefault("")
+    .getOrElse("")
 
 val betaProp = providers.gradleProperty("betaBuild")
 val isBeta = if (betaProp.isPresent) {
@@ -40,7 +34,6 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = if (isBeta) "0.1.0-beta" else "0.1.0"
-        manifestPlaceholders["appName"] = if (isBeta) "Twitter Beta" else "Twitter"
     }
 
     sourceSets {
@@ -96,9 +89,7 @@ dependencies {
 
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)
-    implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
-    implementation(libs.compose.material.icons.extended)
 
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)

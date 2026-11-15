@@ -6,11 +6,10 @@ androidxActivity = "1.10.1"
 androidxLifecycle = "2.8.5"
 androidxBrowser = "1.8.0"
 androidxWebkit = "1.12.1"
-androidxSwiperefresh = "1.0.0"
+androidxSwiperefresh = "1.1.0"
 coreSplashscreen = "1.0.1"
 composeUi = "1.9.5"
 composeMaterial3 = "1.4.0"
-composeIcons = "1.7.8"
 coroutines = "1.10.1"
 serialization = "1.8.0"
 junit = "4.13.2"
@@ -26,9 +25,7 @@ androidx-swiperefreshlayout = { module = "androidx.swiperefreshlayout:swiperefre
 
 compose-ui = { module = "androidx.compose.ui:ui", version.ref = "composeUi" }
 compose-foundation = { module = "androidx.compose.foundation:foundation", version.ref = "composeUi" }
-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview", version.ref = "composeUi" }
 compose-material3 = { module = "androidx.compose.material3:material3", version.ref = "composeMaterial3" }
-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended", version.ref = "composeIcons" }
 
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }

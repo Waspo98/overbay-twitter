@@ -8,6 +8,7 @@ import android.net.Uri
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.MimeTypeMap
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -19,7 +20,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,50 +47,23 @@ private val ORIGIN_ALLOWLIST = setOf(
     "https://*.twitter.com"
 )
 
-/**
- * Controller exposed to [TwitterAppScreen] for navigation, reload, and cache clearing.
- */
-class TwitterWebController {
-    internal var webView: WebView? = null
-    internal var swipeRefresh: SwipeRefreshLayout? = null
-    internal var customViewCallback: WebChromeClient.CustomViewCallback? = null
-
-    fun reload() {
-        webView?.reload()
-    }
-
-    fun goBack() {
-        webView?.goBack()
-    }
-
-    fun loadUrl(url: String) {
-        webView?.loadUrl(url)
-    }
-
-    fun clearCacheAndReload() {
-        webView?.clearCache(true)
-        webView?.reload()
-    }
-
-    fun hideCustomView() {
-        customViewCallback?.onCustomViewHidden()
-        customViewCallback = null
-    }
-}
-
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun TwitterWebView(
     initialUrl: String,
     config: TwitterModConfig,
     configJson: String,
+    isFullyUnfolded: Boolean,
     controller: TwitterWebController,
     onOpenSettings: () -> Unit,
     onShowLinkActions: (String) -> Unit,
     onCanGoBackChange: (Boolean) -> Unit,
     onCustomViewChange: (View?) -> Unit,
     onFirstLoadComplete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onReportHomeFeeds: (String) -> Unit = {},
+    onThemeColorChange: (Int) -> Unit = {},
+    onWebViewAttached: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -97,12 +71,16 @@ fun TwitterWebView(
 
     val configRef = remember { AtomicReference(config) }
     val configJsonRef = remember { AtomicReference(configJson) }
-    configRef.set(config)
-    configJsonRef.set(configJson)
+    val isUnfoldedRef = remember { AtomicReference(isFullyUnfolded) }
 
+    val latestOnOpenSettings by rememberUpdatedState(onOpenSettings)
+    val latestOnShowLinkActions by rememberUpdatedState(onShowLinkActions)
     val latestOnCanGoBack by rememberUpdatedState(onCanGoBackChange)
     val latestOnCustomView by rememberUpdatedState(onCustomViewChange)
     val latestOnFirstLoad by rememberUpdatedState(onFirstLoadComplete)
+    val latestOnReportHomeFeeds by rememberUpdatedState(onReportHomeFeeds)
+    val latestOnThemeColorChange by rememberUpdatedState(onThemeColorChange)
+    val latestOnWebViewAttached by rememberUpdatedState(onWebViewAttached)
 
     var pendingFileCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
     val fileChooserLauncher = rememberLauncherForActivityResult(
@@ -113,28 +91,44 @@ fun TwitterWebView(
     }
 
     val configScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
-    val supportsDocStart = remember { WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) }
+    val coreScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
+    val lastSeededStateRef = remember { AtomicReference<Pair<String, Boolean>?>(null) }
+    val baseUserAgentRef = remember { AtomicReference<String?>(null) }
 
-    fun registerConfigStartScript(webView: WebView, json: String) {
-        if (!supportsDocStart) return
+    fun registerConfigStartScript(webView: WebView, json: String, unfolded: Boolean) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
         configScriptHandlerRef.getAndSet(null)?.remove()
         val handler = runCatching {
             WebViewCompat.addDocumentStartJavaScript(
                 webView,
-                assetBundle.buildConfigSeedScript(json),
+                assetBundle.buildConfigSeedScript(json, unfolded),
                 ORIGIN_ALLOWLIST
             )
         }.getOrNull()
         configScriptHandlerRef.set(handler)
     }
 
-    // Live-push config edits to the running page and update DOCUMENT_START seed for future navigations.
-    LaunchedEffect(config, configJson) {
-        val wv = controller.webView ?: return@LaunchedEffect
-        wv.settings.mediaPlaybackRequiresUserGesture = config.disableVideoAutoplay
-        registerConfigStartScript(wv, configJson)
-        val seedScript = assetBundle.buildConfigSeedScript(configJson)
-        wv.evaluateJavascript(seedScript, null)
+    // Synchronous zero-latency config & posture sync upon committed composition.
+    SideEffect {
+        configRef.set(config)
+        configJsonRef.set(configJson)
+        isUnfoldedRef.set(isFullyUnfolded)
+
+        val wv = controller.webView ?: return@SideEffect
+        if (wv.settings.mediaPlaybackRequiresUserGesture != config.disableVideoAutoplay) {
+            wv.settings.mediaPlaybackRequiresUserGesture = config.disableVideoAutoplay
+        }
+        baseUserAgentRef.get()?.let { baseUa ->
+            val targetUa = TwitterRequestBlocker.buildEffectiveUserAgent(baseUa, isFullyUnfolded)
+            if (wv.settings.userAgentString != targetUa) {
+                wv.settings.userAgentString = targetUa
+            }
+        }
+        val stateKey = configJson to isFullyUnfolded
+        if (lastSeededStateRef.getAndSet(stateKey) != stateKey) {
+            registerConfigStartScript(wv, configJson, isFullyUnfolded)
+            wv.evaluateJavascript(assetBundle.buildConfigSeedScript(configJson, isFullyUnfolded), null)
+        }
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -155,7 +149,13 @@ fun TwitterWebView(
             CookieManager.getInstance().flush()
             pendingFileCallback?.onReceiveValue(null)
             pendingFileCallback = null
-            configScriptHandlerRef.getAndSet(null)?.remove()
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                configScriptHandlerRef.getAndSet(null)?.remove()
+                coreScriptHandlerRef.getAndSet(null)?.remove()
+            } else {
+                configScriptHandlerRef.set(null)
+                coreScriptHandlerRef.set(null)
+            }
             controller.webView?.destroy()
             controller.webView = null
             controller.swipeRefresh = null
@@ -183,11 +183,16 @@ fun TwitterWebView(
                     setSupportZoom(true)
                     builtInZoomControls = true
                     displayZoomControls = false
+                    allowFileAccess = false
+                    allowContentAccess = false
+                    setGeolocationEnabled(false)
                     mediaPlaybackRequiresUserGesture = configRef.get().disableVideoAutoplay
                     mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                    userAgentString = userAgentString
-                        .replace("; wv", "")
-                        .replace("Version/4.0 ", "")
+                    baseUserAgentRef.set(userAgentString)
+                    userAgentString = TwitterRequestBlocker.buildEffectiveUserAgent(
+                        userAgentString,
+                        isUnfoldedRef.get()
+                    )
                 }
 
                 val selfWebView = this
@@ -199,31 +204,62 @@ fun TwitterWebView(
                 addJavascriptInterface(
                     TwitterNativeBridge(
                         context = ctx.applicationContext,
-                        onOpenSettings = onOpenSettings,
-                        onShowLinkActions = onShowLinkActions
+                        onOpenSettings = { latestOnOpenSettings() },
+                        onShowLinkActions = { url -> latestOnShowLinkActions(url) },
+                        onPullToRefreshModalChange = { open -> controller.updatePullToRefresh(modalOpen = open) },
+                        onReportHomeFeeds = { json -> latestOnReportHomeFeeds(json) },
+                        onThemeColorChange = { colorInt ->
+                            controller.applyThemeColor(colorInt)
+                            latestOnThemeColorChange(colorInt)
+                        }
                     ),
                     "TwitterBridge"
                 )
 
-                if (supportsDocStart) {
-                    registerConfigStartScript(this, configJsonRef.get())
-                    runCatching {
+                val docStartSupported = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+                if (docStartSupported) {
+                    val initialJson = configJsonRef.get()
+                    val initialUnfolded = isUnfoldedRef.get()
+                    lastSeededStateRef.set(initialJson to initialUnfolded)
+                    registerConfigStartScript(this, initialJson, initialUnfolded)
+                    val coreHandler = runCatching {
                         WebViewCompat.addDocumentStartJavaScript(
                             this,
                             assetBundle.coreEngineScript,
                             ORIGIN_ALLOWLIST
                         )
-                    }
+                    }.getOrNull()
+                    coreScriptHandlerRef.set(coreHandler)
                 }
 
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                         super.onPageStarted(view, url, favicon)
-                        view.evaluateJavascript(assetBundle.buildConfigSeedScript(configJsonRef.get()), null)
-                        if (!supportsDocStart) {
+                        if (!docStartSupported) {
+                            view.evaluateJavascript(
+                                assetBundle.buildConfigSeedScript(configJsonRef.get(), isUnfoldedRef.get()),
+                                null
+                            )
                             view.evaluateJavascript(assetBundle.coreEngineScript, null)
                         }
+                        controller.updatePullToRefresh(
+                            pathBlocked = isPullRefreshBlockedPath(url),
+                            modalOpen = false
+                        )
                         latestOnCanGoBack(view.canGoBack())
+                    }
+
+                    override fun onPageCommitVisible(view: WebView, url: String?) {
+                        super.onPageCommitVisible(view, url)
+                        latestOnFirstLoad()
+                    }
+
+                    override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                        super.doUpdateVisitedHistory(view, url, isReload)
+                        if (view != null) {
+                            latestOnCanGoBack(view.canGoBack())
+                        }
+                        controller.updatePullToRefresh(pathBlocked = isPullRefreshBlockedPath(url))
                     }
 
                     override fun onPageFinished(view: WebView, url: String?) {
@@ -248,9 +284,10 @@ fun TwitterWebView(
                         view: WebView,
                         request: WebResourceRequest
                     ): Boolean {
+                        if (!request.isForMainFrame) return false
                         val uri = request.url
                         val scheme = uri.scheme?.lowercase().orEmpty()
-                        val host = uri.host?.lowercase().orEmpty()
+                        val host = uri.host.orEmpty()
 
                         if (scheme == "https" && TwitterRequestBlocker.isInternalTwitterHost(host)) {
                             return false
@@ -265,10 +302,7 @@ fun TwitterWebView(
                         }
                         if (scheme == "mailto" || scheme == "tel") {
                             runCatching {
-                                ctx.startActivity(
-                                    Intent(Intent.ACTION_VIEW, uri)
-                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                )
+                                ctx.startActivity(Intent(Intent.ACTION_VIEW, uri))
                             }
                             return true
                         }
@@ -284,11 +318,11 @@ fun TwitterWebView(
                     ): Boolean {
                         pendingFileCallback?.onReceiveValue(null)
                         pendingFileCallback = filePathCallback
-                        val mimeTypes = fileChooserParams?.acceptTypes
-                            ?.filter { it.isNotBlank() }
-                            ?.toTypedArray()
-                            ?.takeIf { it.isNotEmpty() }
-                            ?: arrayOf("image/*", "video/*")
+                        val mimeTypes = TwitterRequestBlocker.normalizeAcceptTypes(
+                            fileChooserParams?.acceptTypes
+                        ) { ext ->
+                            MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+                        }
                         runCatching { fileChooserLauncher.launch(mimeTypes) }
                             .onFailure {
                                 pendingFileCallback?.onReceiveValue(null)
@@ -312,15 +346,17 @@ fun TwitterWebView(
 
             val swipeRefresh = SwipeRefreshLayout(ctx).apply {
                 setColorSchemeColors(0xFF1DA1F2.toInt())
-                setProgressBackgroundColorSchemeColor(0xFF15202B.toInt())
-                setOnChildScrollUpCallback { _, _ -> webView.scrollY > 0 }
+                setProgressBackgroundColorSchemeColor(0xFF192734.toInt())
+                setOnChildScrollUpCallback { _, _ -> webView.scrollY > 0 || webView.canScrollVertically(-1) }
                 setOnRefreshListener { webView.reload() }
                 addView(webView)
             }
 
             controller.webView = webView
             controller.swipeRefresh = swipeRefresh
+            controller.updatePullToRefresh(pathBlocked = isPullRefreshBlockedPath(initialUrl))
             webView.loadUrl(initialUrl)
+            latestOnWebViewAttached()
             swipeRefresh
         }
     )
