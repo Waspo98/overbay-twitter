@@ -1,0 +1,24 @@
+# Gradle & Android build artifacts
+.gradle/
+.kotlin/
+build/
+app/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Local configuration & signing secrets
+local.properties
+*.jks
+*.keystore
+.env
+*.env.local
+
+# IDE & OS metadata
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+*.log

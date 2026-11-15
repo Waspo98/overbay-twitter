@@ -1,0 +1,140 @@
+/* Classic Twitter Branding (#1DA1F2) */
+html[data-tw-classic-brand="true"] [data-testid="SideNav_NewTweet_Button"],
+html[data-tw-classic-brand="true"] [data-testid="tweetButtonInline"],
+html[data-tw-classic-brand="true"] [data-testid="tweetButton"] {
+    background-color: #1DA1F2 !important;
+    border-color: #1DA1F2 !important;
+    color: #FFFFFF !important;
+}
+
+html[data-tw-classic-brand="true"] [data-testid="SideNav_NewTweet_Button"] *,
+html[data-tw-classic-brand="true"] [data-testid="tweetButtonInline"] *,
+html[data-tw-classic-brand="true"] [data-testid="tweetButton"] * {
+    color: #FFFFFF !important;
+}
+
+html[data-tw-classic-brand="true"] a[href="/home"] svg,
+html[data-tw-classic-brand="true"] [data-testid="TopNavBar"] svg[data-tw-bird="true"] {
+    color: #1DA1F2 !important;
+}
+
+/* Strip all Grok AI surfaces */
+html[data-tw-remove-grok="true"] a[href^="/i/grok"],
+html[data-tw-remove-grok="true"] a[href*="grok.x.ai"],
+html[data-tw-remove-grok="true"] button[aria-label*="Grok" i],
+html[data-tw-remove-grok="true"] [role="button"][aria-label*="Grok" i],
+html[data-tw-remove-grok="true"] [data-testid*="grok" i],
+html[data-tw-remove-grok="true"] [data-testid="GrokDrawer"],
+html[data-tw-remove-grok="true"] [aria-label="Grok"] {
+    display: none !important;
+}
+
+/* Strip Subscribe buttons, Get Verified & Premium upsells */
+html[data-tw-remove-upsells="true"] a[href^="/i/premium_sign_up"],
+html[data-tw-remove-upsells="true"] a[href^="/i/verified-choose"],
+html[data-tw-remove-upsells="true"] a[href^="/i/verified-orgs"],
+html[data-tw-remove-upsells="true"] a[href^="/i/monetization"],
+html[data-tw-remove-upsells="true"] a[href$="/creator-subscriptions"],
+html[data-tw-remove-upsells="true"] a[href$="/subscriptions"],
+html[data-tw-remove-upsells="true"] [data-testid="subscribeButton"],
+html[data-tw-remove-upsells="true"] [data-testid="superFollowButton"],
+html[data-tw-remove-upsells="true"] [data-testid="premiumUpsell"],
+html[data-tw-remove-upsells="true"] button[aria-label^="Subscribe to" i],
+html[data-tw-remove-upsells="true"] [role="button"][aria-label^="Subscribe to" i],
+html[data-tw-remove-upsells="true"] [aria-label="Premium"],
+html[data-tw-remove-upsells="true"] aside[aria-label*="Subscribe to Premium" i] {
+    display: none !important;
+}
+
+/* Hide "For You" tab when marked by twitter-dom.js */
+html[data-tw-hide-foryou="true"] [data-tw-foryou-tab="true"] {
+    display: none !important;
+}
+
+/* Hide View Counts on tweets */
+html[data-tw-hide-views="true"] article[data-testid="tweet"] a[href*="/analytics"] {
+    display: none !important;
+}
+
+/* Hide Bookmark Counts while preserving Bookmark action */
+html[data-tw-hide-bookmarks="true"] button[data-testid="bookmark"] [data-testid="app-text-transition-container"] {
+    display: none !important;
+}
+
+/* Clean Bottom & Drawer Navigation (Home, Search/Explore, Notifications, Messages) */
+html[data-tw-clean-nav="true"] [data-testid="BottomBar"] a[href*="/communities"],
+html[data-tw-clean-nav="true"] [data-testid="BottomBar"] a[href*="/jobs"],
+html[data-tw-clean-nav="true"] [data-testid="BottomBar"] a[href*="/i/spaces"],
+html[data-tw-clean-nav="true"] [data-testid="BottomBar"] a[href*="/i/grok"],
+html[data-tw-clean-nav="true"] [data-testid="BottomBar"] a[href*="/i/premium"],
+html[data-tw-clean-nav="true"] [data-testid="BottomBar"] a[href*="/i/verified"],
+html[data-tw-clean-nav="true"] nav[aria-label="Primary"] a[href*="/communities"],
+html[data-tw-clean-nav="true"] nav[aria-label="Primary"] a[href*="/jobs"],
+html[data-tw-clean-nav="true"] nav[aria-label="Primary"] a[href*="/i/verified-orgs"],
+html[data-tw-clean-nav="true"] nav[aria-label="Primary"] a[href*="/i/monetization"] {
+    display: none !important;
+}
+
+/* Verified Badge Modes */
+html[data-tw-badge-mode="HIDE_ALL"] [data-testid="icon-verified"] {
+    display: none !important;
+}
+
+html[data-tw-badge-mode="HIDE_PAID_BLUE"] [data-testid="icon-verified"][data-tw-paid-blue="true"] {
+    display: none !important;
+}
+
+/* Injected Video Download Button */
+.tw-mod-dl-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    padding: 0 6px;
+    margin: 0;
+    cursor: pointer;
+    color: rgb(113, 118, 123);
+    border-radius: 9999px;
+    min-height: 32px;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.tw-mod-dl-btn:active {
+    color: #1DA1F2;
+    background-color: rgba(29, 161, 242, 0.14);
+}
+
+.tw-mod-dl-btn svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+/* Injected Profile Drawer Mod Settings Entry */
+.tw-mod-drawer-item {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    width: 100%;
+    padding: 14px 16px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    color: inherit;
+}
+
+.tw-mod-drawer-item:active {
+    background-color: rgba(29, 161, 242, 0.12);
+}
+
+.tw-mod-drawer-item svg {
+    width: 22px;
+    height: 22px;
+    fill: #1DA1F2;
+    flex-shrink: 0;
+}
