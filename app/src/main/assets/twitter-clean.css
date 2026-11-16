@@ -282,7 +282,6 @@ html[data-tw-force-bottom-nav="true"] header[role="banner"] [data-testid="SideNa
 }
 
 /* Keep Profile reachable when sidebar is converted to bottom bar */
-html[data-tw-force-bottom-nav="true"][data-tw-clean-nav="true"] header[role="banner"] nav[aria-label="Primary"] a[href*="/i/chat"],
 html[data-tw-force-bottom-nav="true"][data-tw-clean-nav="true"] header[role="banner"] nav[aria-label="Primary"] a[href*="/i/bookmarks"],
 html[data-tw-force-bottom-nav="true"][data-tw-clean-nav="true"] header[role="banner"] nav[aria-label="Primary"] a[href*="/lists"] {
     display: none !important;

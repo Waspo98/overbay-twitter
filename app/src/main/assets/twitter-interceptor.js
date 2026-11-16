@@ -8,7 +8,7 @@
     const TRACKING_PARAMS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id", "fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "igsh", "_hsenc", "_hsmi", "vero_id", "mkt_tok"];
     const SKIP_WALK_KEYS = new Set(["legacy", "entities", "extended_entities", "video_info", "sizes", "features", "professional", "affiliates_highlighted_label", "clientEventInfo", "feedbackInfo", "promotedMetadata", "unmention_data", "edit_control", "views", "quick_promote_eligibility"]);
     const CAROUSEL_PREFIXES = ["who-to-follow-", "who-to-subscribe-", "communities-to-join-", "topics-to-follow-", "creator-subscriptions-", "inline-prompt-", "relevance-prompt-", "list-to-follow-", "connect-", "suggested-"];
-    const NON_TIMELINE_GQL_RE = /\/i\/api\/graphql\/[^/?]+\/(Favorite|Unfavorite|CreateBookmark|DeleteBookmark|CreateRetweet|DeleteRetweet|DataSaver|BadgeCount|PutClientEducationFlag|SubscribeTo|UnsubscribeFrom)/i;
+    const NON_TIMELINE_GQL_RE = /\/i\/api\/graphql\/[^/?]+\/(Favorite|Unfavorite|CreateBookmark|DeleteBookmark|CreateRetweet|DeleteRetweet|DataSaver|BadgeCount|PutClientEducationFlag|SubscribeTo|UnsubscribeFrom|ClientEvent)/i;
 
     function lruSet(map, key, value, max) {
         if (!key || value === undefined || value === null) return;
@@ -275,7 +275,11 @@
             for (const item of node) walkAndProcess(item, url, cfg, mutes, state, depth + 1);
             return;
         }
-        if (node.legacy && (node.rest_id || node.core)) { indexTweetTree(node); return; }
+        const hasTimeline = Boolean(node.instructions || node.timeline || node.timeline_v2 || node.tweets_timeline || node.pinned_timelines);
+        if (!hasTimeline && (node.__typename === "Tweet" || (node.legacy && node.core?.user_results))) {
+            indexTweetTree(node);
+            return;
+        }
         if (Array.isArray(node.pinned_timelines)) indexPinnedTimelines(node.pinned_timelines);
         if (Array.isArray(node.instructions) && filterInstructionsList(node.instructions, url, cfg, mutes)) state.mutated = true;
         for (const key of Object.keys(node)) {
@@ -310,7 +314,7 @@
             let rawText = null;
             try {
                 const reqUrl = typeof args[0] === "string" ? args[0] : (args[0]?.url || response.url || "");
-                if (!isTargetApiUrl(reqUrl) || !response.ok) return response;
+                if (!isTargetApiUrl(reqUrl) || !response.ok || response.status === 204 || response.status === 205) return response;
                 const ct = response.headers.get("content-type") || "";
                 if (!ct.includes("json") && !reqUrl.includes("/graphql/")) return response;
 
@@ -325,8 +329,9 @@
                 }
                 return out;
             } catch (_) {
+                const isNullBody = response.status === 204 || response.status === 205 || response.status === 304;
                 return rawText !== null
-                    ? new Response(rawText, { status: response.status, statusText: response.statusText, headers: response.headers })
+                    ? new Response(isNullBody ? null : rawText, { status: response.status, statusText: response.statusText, headers: response.headers })
                     : response;
             }
         };

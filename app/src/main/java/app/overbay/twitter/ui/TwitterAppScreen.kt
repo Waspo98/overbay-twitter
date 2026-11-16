@@ -21,7 +21,6 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -115,19 +114,22 @@ fun TwitterAppScreen(
     var isWebViewAttached by remember { mutableStateOf(false) }
 
     // Keep system bar icon contrast & immersive fullscreen video state in lockstep with WebView.
-    SideEffect {
-        val window = activity?.window ?: return@SideEffect
-        val insetsController = WindowCompat.getInsetsController(window, view)
-        val lightBars = isWebLightTheme && customVideoView == null
-        insetsController.isAppearanceLightStatusBars = lightBars
-        insetsController.isAppearanceLightNavigationBars = lightBars
-        if (customVideoView != null) {
-            insetsController.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            insetsController.hide(WindowInsetsCompat.Type.systemBars())
-        } else {
-            insetsController.show(WindowInsetsCompat.Type.systemBars())
+    DisposableEffect(activity, view, isWebLightTheme, customVideoView != null) {
+        val window = activity?.window
+        if (window != null) {
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            val lightBars = isWebLightTheme && customVideoView == null
+            insetsController.isAppearanceLightStatusBars = lightBars
+            insetsController.isAppearanceLightNavigationBars = lightBars
+            if (customVideoView != null) {
+                insetsController.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                insetsController.hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+            }
         }
+        onDispose { }
     }
 
     DisposableEffect(controller) {
@@ -151,10 +153,28 @@ fun TwitterAppScreen(
         onDeepLinkConsumed()
     }
 
+    fun dismissSettingsSheet() {
+        showSettingsSheet = false
+        if (pendingReloadPrompt) {
+            pendingReloadPrompt = false
+            scope.launch {
+                snackbarHostState.currentSnackbarData?.dismiss()
+                val res = snackbarHostState.showSnackbar(
+                    message = "Timeline filter updated",
+                    actionLabel = "Reload",
+                    duration = SnackbarDuration.Short
+                )
+                if (res == SnackbarResult.ActionPerformed) {
+                    controller.reload()
+                }
+            }
+        }
+    }
+
     BackHandler(enabled = customVideoView != null || canGoBack || showSettingsSheet) {
         when {
             customVideoView != null -> controller.hideCustomView()
-            showSettingsSheet -> showSettingsSheet = false
+            showSettingsSheet -> dismissSettingsSheet()
             canGoBack -> controller.goBack()
         }
     }
@@ -257,23 +277,7 @@ fun TwitterAppScreen(
                     pendingReloadPrompt = false
                     controller.clearCacheAndReload()
                 },
-                onDismiss = {
-                    showSettingsSheet = false
-                    if (pendingReloadPrompt) {
-                        pendingReloadPrompt = false
-                        scope.launch {
-                            snackbarHostState.currentSnackbarData?.dismiss()
-                            val res = snackbarHostState.showSnackbar(
-                                message = "Timeline filter updated",
-                                actionLabel = "Reload",
-                                duration = SnackbarDuration.Short
-                            )
-                            if (res == SnackbarResult.ActionPerformed) {
-                                controller.reload()
-                            }
-                        }
-                    }
-                }
+                onDismiss = ::dismissSettingsSheet
             )
         }
 

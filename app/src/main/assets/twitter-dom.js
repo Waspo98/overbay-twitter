@@ -14,7 +14,7 @@
     let switchedOnThisHomeVisit = false, userPickedTabOnVisit = false, homeVisitEnteredAt = 0;
     let lastDefaultHomeFeed = null, lastKnownPath = "", lastDialogOpen = null;
     let lastReportedFeedsSig = "", lastDatasetSig = "", lastReportedThemeHex = "";
-    let fullScanPending = true, themeDirty = true, tabsDirty = true;
+    let fullScanPending = true, themeDirty = true, tabsDirty = true, htmlObserved = false, bodyObserved = false;
     const dirtyRoots = new Set();
 
     const getCfg = () => window.__TWITTER_CONFIG__ || {};
@@ -40,6 +40,8 @@
         if (typeof isUnfolded === "boolean") window.__TWITTER_IS_UNFOLDED__ = isUnfolded;
         const root = document.documentElement;
         if (!root) return;
+        if (!htmlObserved) { htmlObserved = true; themeObserver.observe(root, { attributes: true, attributeFilter: ["style", "class"] }); }
+        if (document.body && !bodyObserved) { bodyObserved = true; themeObserver.observe(document.body, { attributes: true, attributeFilter: ["style", "class"] }); }
         const forceBottom = window.__TWITTER_IS_UNFOLDED__ === false && !document.querySelector('[data-testid="BottomBar"]') && Boolean(document.querySelector('header[role="banner"] nav[aria-label="Primary"]'));
         const sig = [cfg.classicTwitterBranding !== false, cfg.removeGrok !== false, cfg.removePremiumUpsells !== false, Boolean(cfg.hideAddFeedButton), cfg.hideViewCounts !== false, Boolean(cfg.hideBookmarkCounts), cfg.cleanBottomNav !== false, cfg.verifiedBadgeMode || "SHOW_ALL", forceBottom].join("|");
 
@@ -227,7 +229,7 @@
     function handleHomeTabs(cfg) {
         if (!location.pathname.startsWith("/home")) { switchedOnThisHomeVisit = userPickedTabOnVisit = false; return; }
         if (lastKnownPath !== location.pathname) { switchedOnThisHomeVisit = userPickedTabOnVisit = false; homeVisitEnteredAt = Date.now(); tabsDirty = true; }
-        if (!tabsDirty && switchedOnThisHomeVisit) return;
+        if (!tabsDirty && (switchedOnThisHomeVisit || userPickedTabOnVisit || Date.now() - homeVisitEnteredAt < 3000)) return;
         const tablist = document.querySelector('[data-testid="primaryColumn"] [role="tablist"]') || document.querySelector('[role="tablist"]');
         const tabs = tablist ? tablist.querySelectorAll('[role="tab"]') : [];
         if (!tablist || tabs.length === 0) return;
@@ -267,10 +269,8 @@
         if (visible.length > 0 && !userPickedTabOnVisit && (!switchedOnThisHomeVisit || !activeVisible)) {
             const wantKey = String(cfg.defaultHomeFeed || "For you").trim().toLowerCase();
             const exact = visible.find((e) => e.key === wantKey), pick = exact || (!activeVisible ? visible[0] : null);
-            if (pick) {
-                if (pick.tab.getAttribute("aria-selected") !== "true") pick.tab.click();
-                if (!(!exact && wantKey !== "for you" && wantKey !== "following" && (Date.now() - homeVisitEnteredAt < 3000))) switchedOnThisHomeVisit = true;
-            }
+            if (pick && pick.tab.getAttribute("aria-selected") !== "true") pick.tab.click();
+            if (exact || wantKey === "for you" || wantKey === "following" || (Date.now() - homeVisitEnteredAt >= 3000)) switchedOnThisHomeVisit = true;
         }
     }
 
@@ -418,12 +418,14 @@
         requestAnimationFrame(() => { rafPending = false; runDomPass(); });
     }
 
+    const themeObserver = new MutationObserver(() => { themeDirty = true; schedulePass(); });
+
     const observer = new MutationObserver((records) => {
         let relevant = false;
         for (const rec of records) {
-            if (rec.type === "attributes") {
-                if (rec.target === document.body || rec.target === document.documentElement) themeDirty = relevant = true;
-                continue;
+            if (rec.removedNodes.length > 0) {
+                if (lastDialogOpen) relevant = true;
+                if (rec.target?.closest?.('[role="tablist"]')) tabsDirty = relevant = true;
             }
             for (const n of rec.addedNodes) {
                 const el = n.nodeType === Node.ELEMENT_NODE ? n : (n.nodeType === Node.TEXT_NODE ? rec.target : null);
@@ -438,7 +440,7 @@
         }
         if (relevant) schedulePass();
     });
-    observer.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+    observer.observe(document, { childList: true, subtree: true });
 
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", () => { fullScanPending = themeDirty = true; runDomPass(); });

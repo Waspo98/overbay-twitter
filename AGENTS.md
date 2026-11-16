@@ -49,8 +49,10 @@ This repo lives inside the `C:\Docker` workspace as a personal Android app proje
        - `removeGrok` *(default `true`)* — Strip all Grok nav icons, inline tweet buttons, profile summaries, and drawers.
        - `removePremiumUpsells` *(default `true`)* — Strip profile `"Subscribe"` buttons, `"Get Verified"` / `"Premium"` upsells, Monetization, and Creator Subscriptions tabs.
     3. **Timeline & Algorithmic Control:**
-       - `forceFollowingTab` *(default `true`)* — Auto-switch to chronological *Following* tab on launch.
-       - `hideForYouTab` *(default `false`)* — Hide the algorithmic *For You* tab header completely so you cannot swipe into it.
+       - `defaultHomeFeed` *(default `"For you"`)* — Automatically selects the user's chosen Home header feed tab (`For you`, `Following`, or a detected List) on `/home`.
+       - `stripSuggestedHomeFeeds` *(default `true`)* — Hide X's algorithmic sports/topic header tabs while keeping `For you`, `Following`, and user Lists (unless pinned in `pinnedHomeFeeds`).
+       - `hideAddFeedButton` *(default `false`)* — Hide the trailing `+` button in the `/home` tab header.
+       - `homeFeedOrder` / `hiddenHomeFeeds` — Persistent tab ordering and per-feed visibility overrides in `/home` header tabs.
        - `stripTimelineCarousels` *(default `true`)* — Remove *"Who to follow"*, *"Topics to follow"*, *"Communities to join"*, and *"Creators for you"* modules from GraphQL JSON.
        - `demoteBlueCheckReplies` *(default `false`)* — Hide/demote paid `is_blue_verified` low-engagement spam in reply threads.
        - `disableAutoRefreshOnResume` *(default `true`)* — Prevent timeline scroll jumping/auto-refreshing when returning from background.

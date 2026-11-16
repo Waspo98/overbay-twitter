@@ -1,5 +1,6 @@
 package app.overbay.twitter
 
+import android.content.SharedPreferences
 import app.overbay.twitter.model.DetectedHomeFeed
 import app.overbay.twitter.model.HomeFeedKind
 import app.overbay.twitter.model.TwitterConfigRepository
@@ -226,5 +227,86 @@ class TwitterModConfigTest {
             homeFeedOrder = listOf("Following", "Tech")
         )
         assertFalse(feedTweak.requiresReloadComparedTo(base))
+    }
+
+    @Test
+    fun decodeConfigJsonMigratesLegacyHideForYouTabWhileAdoptingForYouDefault() {
+        val legacyDefaultJson = """{"forceFollowingTab":true,"hideForYouTab":false,"blockAds":true}"""
+        val legacyDefault = TwitterConfigRepository.decodeConfigJson(legacyDefaultJson)
+        assertEquals("For you", legacyDefault.defaultHomeFeed)
+        assertTrue(legacyDefault.hiddenHomeFeeds.isEmpty())
+
+        val legacyHiddenJson = """{"forceFollowingTab":true,"hideForYouTab":true,"hideViewCounts":false}"""
+        val legacyHidden = TwitterConfigRepository.decodeConfigJson(legacyHiddenJson)
+        assertEquals(listOf("For you"), legacyHidden.hiddenHomeFeeds)
+        assertEquals("Following", legacyHidden.defaultHomeFeed)
+        assertFalse(legacyHidden.hideViewCounts)
+
+        val modernJson = """{"defaultHomeFeed":"For you","hiddenHomeFeeds":[],"hideForYouTab":true}"""
+        val modern = TwitterConfigRepository.decodeConfigJson(modernJson)
+        assertEquals("For you", modern.defaultHomeFeed)
+        assertTrue(modern.hiddenHomeFeeds.isEmpty())
+
+        val malformed = TwitterConfigRepository.decodeConfigJson("{not valid json")
+        assertEquals(TwitterModConfig(), malformed)
+    }
+
+    @Test
+    fun repositoryHomeFeedMutationsUpdateDefaultPinsVisibilityAndOrder() {
+        val repo = TwitterConfigRepository(InMemorySharedPreferences())
+        val nfl = DetectedHomeFeed("NFL", HomeFeedKind.SUGGESTED)
+        val forYou = DetectedHomeFeed("For you", HomeFeedKind.CORE)
+
+        // Enabling a suggested feed pins it so stripSuggestedHomeFeeds won't hide it
+        repo.toggleHomeFeedVisibility(nfl, visible = true)
+        assertTrue(repo.config.value.isHomeFeedVisible(nfl))
+        assertTrue("NFL" in repo.config.value.pinnedHomeFeeds)
+
+        // Hiding the current default feed falls back to the first remaining visible feed
+        repo.toggleHomeFeedVisibility(forYou, visible = false)
+        assertFalse(repo.config.value.isHomeFeedVisible(forYou))
+        assertEquals("Following", repo.config.value.defaultHomeFeed)
+
+        // Selecting a hidden/suggested feed as default un-hides and pins it
+        repo.setDefaultHomeFeed("NFL")
+        assertEquals("NFL", repo.config.value.defaultHomeFeed)
+        assertTrue(repo.config.value.isHomeFeedVisible(nfl))
+
+        // Reordering moves Following up ahead of For you
+        repo.moveHomeFeed("Following", -1)
+        assertEquals("Following", repo.config.value.homeFeedOrder.first())
+    }
+
+    private class InMemorySharedPreferences : SharedPreferences {
+        private val data = LinkedHashMap<String, Any?>()
+
+        override fun getAll(): MutableMap<String, *> = LinkedHashMap(data)
+        override fun getString(key: String?, defValue: String?): String? = data[key] as? String ?: defValue
+        override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? = defValues
+        override fun getInt(key: String?, defValue: Int): Int = data[key] as? Int ?: defValue
+        override fun getLong(key: String?, defValue: Long): Long = data[key] as? Long ?: defValue
+        override fun getFloat(key: String?, defValue: Float): Float = data[key] as? Float ?: defValue
+        override fun getBoolean(key: String?, defValue: Boolean): Boolean = data[key] as? Boolean ?: defValue
+        override fun contains(key: String?): Boolean = data.containsKey(key)
+        override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {}
+        override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener?) {}
+        override fun edit(): SharedPreferences.Editor = object : SharedPreferences.Editor {
+            private val pending = LinkedHashMap<String, Any?>()
+            private var clearAll = false
+
+            override fun putString(key: String?, value: String?) = apply { if (key != null) pending[key] = value }
+            override fun putStringSet(key: String?, values: MutableSet<String>?) = apply { if (key != null) pending[key] = values }
+            override fun putInt(key: String?, value: Int) = apply { if (key != null) pending[key] = value }
+            override fun putLong(key: String?, value: Long) = apply { if (key != null) pending[key] = value }
+            override fun putFloat(key: String?, value: Float) = apply { if (key != null) pending[key] = value }
+            override fun putBoolean(key: String?, value: Boolean) = apply { if (key != null) pending[key] = value }
+            override fun remove(key: String?) = apply { if (key != null) pending[key] = null }
+            override fun clear() = apply { clearAll = true }
+            override fun commit(): Boolean { apply(); return true }
+            override fun apply() {
+                if (clearAll) data.clear()
+                pending.forEach { (k, v) -> if (v == null) data.remove(k) else data[k] = v }
+            }
+        }
     }
 }

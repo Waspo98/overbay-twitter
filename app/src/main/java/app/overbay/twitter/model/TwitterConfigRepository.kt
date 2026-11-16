@@ -8,6 +8,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import org.json.JSONArray
 
 /**
@@ -31,8 +34,7 @@ class TwitterConfigRepository(
 
     private fun loadInitial(): TwitterModConfig {
         val raw = prefs.getString(KEY_CONFIG_JSON, null) ?: return TwitterModConfig()
-        return runCatching { json.decodeFromString<TwitterModConfig>(raw) }
-            .getOrDefault(TwitterModConfig())
+        return decodeConfigJson(raw)
     }
 
     private fun loadDetectedFeeds(): List<DetectedHomeFeed> {
@@ -173,6 +175,25 @@ class TwitterConfigRepository(
         internal val json = Json {
             ignoreUnknownKeys = true
             encodeDefaults = true
+        }
+
+        internal fun decodeConfigJson(raw: String): TwitterModConfig {
+            return runCatching {
+                val parsed = json.decodeFromString<TwitterModConfig>(raw)
+                val obj = json.parseToJsonElement(raw) as? JsonObject ?: return@runCatching parsed
+                val legacyHideForYou = obj["hideForYouTab"]?.jsonPrimitive?.booleanOrNull == true
+                if (legacyHideForYou && "hiddenHomeFeeds" !in obj) {
+                    val hidden = parsed.hiddenHomeFeeds.ifEmpty { listOf("For you") }
+                    val fallbackFeed = if (parsed.defaultHomeFeed.equals("For you", ignoreCase = true)) {
+                        "Following"
+                    } else {
+                        parsed.defaultHomeFeed
+                    }
+                    parsed.copy(hiddenHomeFeeds = hidden, defaultHomeFeed = fallbackFeed)
+                } else {
+                    parsed
+                }
+            }.getOrDefault(TwitterModConfig())
         }
     }
 }
