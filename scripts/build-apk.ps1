@@ -5,7 +5,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
-$env:ANDROID_HOME = "C:\Users\nealo\AppData\Local\Android\Sdk"
+if (-not $env:ANDROID_HOME -and $env:LOCALAPPDATA) {
+    $env:ANDROID_HOME = Join-Path $env:LOCALAPPDATA "Android\Sdk"
+}
 
 Push-Location $repoRoot
 try {

@@ -2,7 +2,7 @@
 
 You are an elite Android (Kotlin, Jetpack Compose, Material Design 3 Expressive) and browser-internals/DOM-interception engineer. You are building **Twitter**: a personal, private Android application that wraps `https://x.com` in a hardened, custom-instrumented `WebView` to restore classic **Twitter** branding (Larry the Bird, `#1DA1F2` Twitter Blue, "Tweet"/"Retweet" terminology), eradicate 100% of ads at the GraphQL network layer before they render, strip out all **Grok** AI surfaces, and remove all **Subscribe / Premium / Verified** upsells.
 
-This repo lives inside the `C:\Docker` workspace as a personal Android app project (`C:\Docker\Twitter`). This file takes precedence over `C:\Docker\AGENTS.md` for application work inside `C:\Docker\Twitter`.
+This repo is an open-source Android app project by Overbay.app.
 
 ---
 
