@@ -14,6 +14,7 @@ html[data-tw-classic-brand="true"] :focus-visible {
 }
 
 html[data-tw-classic-brand="true"] [data-testid="SideNav_NewTweet_Button"],
+html[data-tw-classic-brand="true"] [data-testid="FloatingActionButtons_Tweet_Button"],
 html[data-tw-classic-brand="true"] [data-testid="tweetButtonInline"],
 html[data-tw-classic-brand="true"] [data-testid="tweetButton"] {
     background-color: #1DA1F2 !important;
@@ -23,12 +24,14 @@ html[data-tw-classic-brand="true"] [data-testid="tweetButton"] {
 }
 
 html[data-tw-classic-brand="true"] [data-testid="SideNav_NewTweet_Button"]:active,
+html[data-tw-classic-brand="true"] [data-testid="FloatingActionButtons_Tweet_Button"]:active,
 html[data-tw-classic-brand="true"] [data-testid="tweetButtonInline"]:active,
 html[data-tw-classic-brand="true"] [data-testid="tweetButton"]:active {
     background-color: #1A8CD8 !important;
 }
 
 html[data-tw-classic-brand="true"] [data-testid="SideNav_NewTweet_Button"] *,
+html[data-tw-classic-brand="true"] [data-testid="FloatingActionButtons_Tweet_Button"] *,
 html[data-tw-classic-brand="true"] [data-testid="tweetButtonInline"] *,
 html[data-tw-classic-brand="true"] [data-testid="tweetButton"] * {
     color: #FFFFFF !important;
@@ -80,13 +83,15 @@ html[data-tw-hide-add-feed="true"] [data-tw-add-feed-btn="true"] {
     display: none !important;
 }
 
-/* Hide View Counts on tweets */
+/* Hide View Counts on tweets and collapse the empty flex wrapper slot */
+html[data-tw-hide-views="true"] article[data-testid="tweet"] [role="group"] > div:has(> a[href*="/analytics"]),
 html[data-tw-hide-views="true"] article[data-testid="tweet"] a[href*="/analytics"] {
     display: none !important;
 }
 
-/* Hide Bookmark Counts while preserving Bookmark action */
-html[data-tw-hide-bookmarks="true"] button[data-testid="bookmark"] [data-testid="app-text-transition-container"] {
+/* Hide Bookmark Counts while preserving Bookmark / Remove Bookmark action */
+html[data-tw-hide-bookmarks="true"] button[data-testid="bookmark"] [data-testid="app-text-transition-container"],
+html[data-tw-hide-bookmarks="true"] button[data-testid="removeBookmark"] [data-testid="app-text-transition-container"] {
     display: none !important;
 }
 
@@ -144,9 +149,9 @@ html[data-tw-badge-mode="HIDE_PAID_BLUE"] [data-testid="icon-verified"][data-tw-
 /* Injected Fullscreen Photo Lightbox Download Button */
 .tw-mod-img-dl-btn {
     position: fixed;
-    right: 18px;
-    bottom: 72px;
-    z-index: 10;
+    right: 16px;
+    bottom: 76px;
+    z-index: 9999;
     display: inline-flex;
     align-items: center;
     justify-content: center;

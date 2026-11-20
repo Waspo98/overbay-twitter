@@ -3,21 +3,29 @@
     window.__TW_DOM_INSTALLED__ = true;
 
     const BIRD_PATH = "M23.643 4.937c-.835.37-1.732.62-2.675.733.962-.576 1.7-1.49 2.048-2.578-.9.534-1.897.922-2.958 1.13-.85-.904-2.06-1.47-3.4-1.47-2.572 0-4.658 2.086-4.658 4.66 0 .364.042.718.12 1.06-3.873-.195-7.304-2.05-9.602-4.868-.4.69-.63 1.49-.63 2.342 0 1.616.823 3.043 2.072 3.878-.764-.025-1.482-.234-2.11-.583v.06c0 2.257 1.605 4.14 3.737 4.568-.392.106-.803.162-1.227.162-.3 0-.593-.028-.877-.082.593 1.85 2.313 3.198 4.352 3.234-1.595 1.25-3.604 1.995-5.786 1.995-.376 0-.747-.022-1.112-.065 2.062 1.323 4.51 2.093 7.14 2.093 8.57 0 13.255-7.098 13.255-13.254 0-.2-.005-.402-.014-.602.91-.658 1.7-1.477 2.323-2.41z";
-    const DOWNLOAD_PATH = "M12 16l-5-5 1.41-1.41L11 12.17V4h2v8.17l2.59-2.58L17 11l-5 5zm-7 2h14v2H5v-2z";
+    const BRAND_SLOT_SELECTOR = '[aria-label="X"] svg, [data-testid="TopNavBar"] a[href="/home"] svg, h1 a[href="/home"] svg';
+    const TERM_SELECTOR = "button span,[role='button'] span,[role='menuitem'] span,[role='tab'] span,h1 span,h2 span,nav a span,[data-testid='tweetButtonInline'] span,[data-testid='tweetButton'] span,[data-placeholder]";
+    const TERM_SKIP_ANCESTORS = '[data-testid="tweetText"], [data-testid="UserDescription"], [data-testid="UserName"], [data-testid="User-Name"], [contenteditable="true"]';
+    const SHOW_POSTS_RE = /^Show\s+([\d,]+)\s+(post|posts)$/i;
 
     const origTextMap = new WeakMap();
-    const TERM_MAP = new Map([["Post", "Tweet"], ["Posts", "Tweets"], ["Post your reply", "Tweet your reply"], ["Repost", "Retweet"], ["Reposted", "Retweeted"], ["Reposts", "Retweets"], ["Quote", "Quote Tweet"], ["Quotes", "Quote Tweets"], ["What is happening?!", "What's happening?"]]);
-    const TERM_SELECTOR = "button span,[role='button'] span,[role='tab'] span,h1 span,h2 span,nav a span,[data-testid='tweetButtonInline'] span,[data-testid='tweetButton'] span,[data-placeholder]";
-    const SUGGESTED_FEEDS = new Set(["nfl", "nba", "nhl", "mlb", "baseball", "college football", "cfb", "soccer", "trending", "news", "sports", "entertainment", "gaming", "technology", "politics", "business", "finance", "music", "cricket", "golf", "tennis", "f1", "nascar", "ufc", "boxing", "wwe", "olympics"]);
-    const EXTERNAL_SKIP_RE = /^https?:\/\/([^/]+\.)?(x|twitter)\.com\//i;
+    const TERM_MAP = new Map([
+        ["Post", "Tweet"], ["Posts", "Tweets"], ["Post your reply", "Tweet your reply"],
+        ["Repost", "Retweet"], ["Reposted", "Retweeted"], ["Reposts", "Retweets"],
+        ["Quote", "Quote Tweet"], ["Quotes", "Quote Tweets"],
+        ["What is happening?!", "What's happening?"],
+        ["Embed post", "Embed Tweet"], ["Delete post", "Delete Tweet"],
+        ["Report post", "Report Tweet"], ["Copy link to post", "Copy link to Tweet"],
+        ["View post engagements", "View Tweet engagements"], ["View post activity", "View Tweet activity"]
+    ]);
 
-    let switchedOnThisHomeVisit = false, userPickedTabOnVisit = false, homeVisitEnteredAt = 0;
-    let lastDefaultHomeFeed = null, lastKnownPath = "", lastDialogOpen = null;
-    let lastReportedFeedsSig = "", lastDatasetSig = "", lastReportedThemeHex = "";
-    let fullScanPending = true, themeDirty = true, tabsDirty = true, htmlObserved = false, bodyObserved = false;
+    let lastKnownPath = "", lastDialogOpen = null, lastDatasetSig = "", lastReportedThemeHex = "";
+    let fullScanPending = true, themeDirty = true, tabsDirty = true, headerDirty = true, dialogDirty = true;
+    let htmlObserved = false, bodyObserved = false, cachedForceBottom = false;
     const dirtyRoots = new Set();
 
     const getCfg = () => window.__TWITTER_CONFIG__ || {};
+    const queryWithinRoots = (roots, fullScan, selector) => window.__TW_FEATURES__.queryWithinRoots(roots, fullScan, selector);
 
     function ensureStyleTag() {
         const cssText = window.__TWITTER_CLEAN_CSS__, mount = document.head || document.documentElement;
@@ -36,14 +44,25 @@
         return `#${h(m[1])}${h(m[2])}${h(m[3])}`.toUpperCase();
     }
 
-    function syncDatasetAndTheme(cfg, isUnfolded) {
-        if (typeof isUnfolded === "boolean") window.__TWITTER_IS_UNFOLDED__ = isUnfolded;
+    function syncDatasetAndTheme(cfg, checkLayout, isUnfolded) {
+        if (typeof isUnfolded === "boolean") {
+            window.__TWITTER_IS_UNFOLDED__ = isUnfolded;
+            checkLayout = true;
+        }
         const root = document.documentElement;
         if (!root) return;
         if (!htmlObserved) { htmlObserved = true; themeObserver.observe(root, { attributes: true, attributeFilter: ["style", "class"] }); }
         if (document.body && !bodyObserved) { bodyObserved = true; themeObserver.observe(document.body, { attributes: true, attributeFilter: ["style", "class"] }); }
-        const forceBottom = window.__TWITTER_IS_UNFOLDED__ === false && !document.querySelector('[data-testid="BottomBar"]') && Boolean(document.querySelector('header[role="banner"] nav[aria-label="Primary"]'));
-        const sig = [cfg.classicTwitterBranding !== false, cfg.removeGrok !== false, cfg.removePremiumUpsells !== false, Boolean(cfg.hideAddFeedButton), cfg.hideViewCounts !== false, Boolean(cfg.hideBookmarkCounts), cfg.cleanBottomNav !== false, cfg.verifiedBadgeMode || "SHOW_ALL", forceBottom].join("|");
+        if (checkLayout) {
+            cachedForceBottom = window.__TWITTER_IS_UNFOLDED__ === false
+                && !document.querySelector('[data-testid="BottomBar"]')
+                && Boolean(document.querySelector('header[role="banner"] nav[aria-label="Primary"]'));
+        }
+        const sig = [
+            cfg.classicTwitterBranding !== false, cfg.removeGrok !== false, cfg.removePremiumUpsells !== false,
+            Boolean(cfg.hideAddFeedButton), cfg.hideViewCounts !== false, Boolean(cfg.hideBookmarkCounts),
+            cfg.cleanBottomNav !== false, cfg.verifiedBadgeMode || "SHOW_ALL", cachedForceBottom
+        ].join("|");
 
         if (sig !== lastDatasetSig) {
             lastDatasetSig = sig;
@@ -52,7 +71,7 @@
                 twRemoveUpsells: String(cfg.removePremiumUpsells !== false), twHideAddFeed: String(Boolean(cfg.hideAddFeedButton)),
                 twHideViews: String(cfg.hideViewCounts !== false), twHideBookmarks: String(Boolean(cfg.hideBookmarkCounts)),
                 twCleanNav: String(cfg.cleanBottomNav !== false), twBadgeMode: String(cfg.verifiedBadgeMode || "SHOW_ALL"),
-                twForceBottomNav: String(forceBottom)
+                twForceBottomNav: String(cachedForceBottom)
             });
             themeDirty = true;
         }
@@ -61,62 +80,69 @@
             if (hex) {
                 themeDirty = false;
                 root.style.setProperty("--tw-bottom-nav-bg", hex);
-                if (hex !== lastReportedThemeHex) { lastReportedThemeHex = hex; window.TwitterBridge?.onThemeColorChanged?.(hex); }
+                if (hex !== lastReportedThemeHex) {
+                    lastReportedThemeHex = hex;
+                    window.TwitterBridge?.onThemeColorChanged?.(hex);
+                }
             }
         }
     }
 
     window.__applyTwitterConfig = function (cfg, isUnfolded) {
-        const nextDefault = String(cfg?.defaultHomeFeed || "For you").trim().toLowerCase();
-        if (lastDefaultHomeFeed !== null && nextDefault !== lastDefaultHomeFeed) switchedOnThisHomeVisit = userPickedTabOnVisit = false;
-        lastDefaultHomeFeed = nextDefault;
+        window.__TW_FEATURES__?.onConfigChanged?.(cfg);
         window.__TWITTER_CONFIG__ = cfg;
-        fullScanPending = themeDirty = tabsDirty = true;
-        syncDatasetAndTheme(cfg, isUnfolded);
+        fullScanPending = themeDirty = tabsDirty = headerDirty = dialogDirty = true;
+        syncDatasetAndTheme(cfg, true, isUnfolded);
         runDomPass();
     };
 
     const isXLogoPath = (d) => Boolean(d) && (d.startsWith("M18.244 2.25h3.308") || d.startsWith("M21.742 21.75l-7.563") || d.startsWith("M14.234 10.162"));
 
-    function queryWithinRoots(roots, fullScan, selector) {
-        if (fullScan) return document.querySelectorAll(selector);
-        const out = [];
-        for (const r of roots) {
-            if (!r.isConnected) continue;
-            if (r.matches?.(selector)) out.push(r);
-            const nested = r.querySelectorAll?.(selector);
-            if (nested?.length) out.push(...nested);
+    function swapSvgToBird(svg, path, currentD) {
+        if (!path.dataset.twOrigD && currentD !== BIRD_PATH) {
+            path.dataset.twOrigD = currentD;
+            path.dataset.twOrigFill = path.getAttribute("fill") || "";
+            svg.dataset.twOrigViewbox = svg.getAttribute("viewBox") || "";
         }
-        return out;
+        if (path.dataset.twOrigD) {
+            path.setAttribute("d", BIRD_PATH);
+            path.setAttribute("fill", "#1DA1F2");
+            svg.setAttribute("viewBox", "0 0 24 24");
+            svg.dataset.twBird = path.dataset.twSwapped = "true";
+        }
     }
 
-    function updateBrandLogos(useClassic, roots, fullScan) {
-        for (const svg of queryWithinRoots(roots, fullScan, useClassic ? "svg" : "svg[data-tw-bird='true']")) {
-            const path = svg.querySelector("path");
-            if (!path) continue;
-            const currentD = path.getAttribute("d") || "";
-            if (useClassic) {
-                if (path.dataset.twSwapped === "true" && currentD === BIRD_PATH) continue;
-                const inNavBar = Boolean(svg.closest('[data-testid="BottomBar"], nav[aria-label="Primary"]'));
-                const isBrandSlot = !inNavBar && Boolean(svg.closest('[aria-label="X"], [data-testid="TopNavBar"] a[href="/home"], h1 a[href="/home"]'));
-                if (!isXLogoPath(currentD) && !(isBrandSlot && svg.getAttribute("viewBox") === "0 0 24 24")) continue;
-                if (!path.dataset.twOrigD && currentD !== BIRD_PATH) {
-                    path.dataset.twOrigD = currentD;
-                    path.dataset.twOrigFill = path.getAttribute("fill") || "";
-                    svg.dataset.twOrigViewbox = svg.getAttribute("viewBox") || "";
+    function updateBrandLogos(useClassic, roots, fullScan, checkHeader) {
+        if (useClassic) {
+            if (fullScan || checkHeader) {
+                for (const svg of document.querySelectorAll(BRAND_SLOT_SELECTOR)) {
+                    const path = svg.querySelector("path");
+                    if (!path) continue;
+                    const currentD = path.getAttribute("d") || "";
+                    if (path.dataset.twSwapped === "true" && currentD === BIRD_PATH) continue;
+                    if (isXLogoPath(currentD) || (svg.getAttribute("viewBox") === "0 0 24 24" && !svg.closest('[data-testid="BottomBar"], nav[aria-label="Primary"]'))) {
+                        swapSvgToBird(svg, path, currentD);
+                    }
                 }
-                if (path.dataset.twOrigD) {
-                    path.setAttribute("d", BIRD_PATH);
-                    path.setAttribute("fill", "#1DA1F2");
-                    svg.setAttribute("viewBox", "0 0 24 24");
-                    svg.dataset.twBird = path.dataset.twSwapped = "true";
+            }
+            for (const svg of queryWithinRoots(roots, fullScan, "svg:not([data-tw-logo-checked])")) {
+                svg.dataset.twLogoChecked = "1";
+                const path = svg.querySelector("path");
+                if (!path) continue;
+                const currentD = path.getAttribute("d") || "";
+                if (isXLogoPath(currentD)) swapSvgToBird(svg, path, currentD);
+            }
+        } else {
+            for (const svg of document.querySelectorAll("svg[data-tw-bird='true']")) {
+                const path = svg.querySelector("path");
+                if (path && path.dataset.twSwapped === "true" && path.dataset.twOrigD) {
+                    path.setAttribute("d", path.dataset.twOrigD);
+                    path.dataset.twOrigFill ? path.setAttribute("fill", path.dataset.twOrigFill) : path.removeAttribute("fill");
+                    if (svg.dataset.twOrigViewbox) svg.setAttribute("viewBox", svg.dataset.twOrigViewbox);
+                    delete svg.dataset.twBird;
+                    delete svg.dataset.twLogoChecked;
+                    delete path.dataset.twSwapped;
                 }
-            } else if (path.dataset.twSwapped === "true" && path.dataset.twOrigD) {
-                path.setAttribute("d", path.dataset.twOrigD);
-                path.dataset.twOrigFill ? path.setAttribute("fill", path.dataset.twOrigFill) : path.removeAttribute("fill");
-                if (svg.dataset.twOrigViewbox) svg.setAttribute("viewBox", svg.dataset.twOrigViewbox);
-                delete svg.dataset.twBird;
-                delete path.dataset.twSwapped;
             }
         }
         const t = document.title;
@@ -124,23 +150,41 @@
         else if (!useClassic && (t === "Twitter" || t.endsWith(" / Twitter"))) document.title = t === "Twitter" ? "X" : t.replace(/ \/ Twitter$/, " / X");
     }
 
+    function mapUiText(trimmed) {
+        const direct = TERM_MAP.get(trimmed);
+        if (direct) return direct;
+        const m = SHOW_POSTS_RE.exec(trimmed);
+        if (m) return `Show ${m[1]} ${m[2].toLowerCase() === "post" ? "Tweet" : "Tweets"}`;
+        return null;
+    }
+
     function rewriteUiTerminology(useClassic, roots, fullScan) {
         for (const el of queryWithinRoots(roots, fullScan, TERM_SELECTOR)) {
-            if (el.closest('[data-testid="tweetText"], [data-testid="UserDescription"], [data-testid="UserName"], [data-testid="User-Name"], [contenteditable="true"]')) continue;
             if (el.hasAttribute("data-placeholder")) {
                 const ph = el.getAttribute("data-placeholder");
                 if (useClassic && TERM_MAP.has(ph)) {
-                    if (!el.dataset.twOrigPh) el.dataset.twOrigPh = ph;
-                    el.setAttribute("data-placeholder", TERM_MAP.get(ph));
-                } else if (!useClassic && el.dataset.twOrigPh) el.setAttribute("data-placeholder", el.dataset.twOrigPh);
+                    if (!el.closest(TERM_SKIP_ANCESTORS)) {
+                        if (!el.dataset.twOrigPh) el.dataset.twOrigPh = ph;
+                        el.setAttribute("data-placeholder", TERM_MAP.get(ph));
+                    }
+                } else if (!useClassic && el.dataset.twOrigPh) {
+                    el.setAttribute("data-placeholder", el.dataset.twOrigPh);
+                }
             }
             if (el.childNodes.length === 1 && el.firstChild.nodeType === Node.TEXT_NODE) {
-                const txt = el.firstChild.nodeValue, trimmed = txt ? txt.trim() : "";
-                if (useClassic && TERM_MAP.has(trimmed)) {
-                    const nextVal = txt.replace(trimmed, TERM_MAP.get(trimmed));
-                    origTextMap.set(el, txt);
-                    el.dataset.twReplacedTo = el.firstChild.nodeValue = nextVal;
-                } else if (!useClassic && el.dataset.twReplacedTo && txt === el.dataset.twReplacedTo && origTextMap.has(el)) {
+                const txt = el.firstChild.nodeValue;
+                const trimmed = txt ? txt.trim() : "";
+                if (useClassic) {
+                    const mapped = trimmed ? mapUiText(trimmed) : null;
+                    if (mapped && !el.closest(TERM_SKIP_ANCESTORS)) {
+                        const nextVal = txt.replace(trimmed, mapped);
+                        origTextMap.set(el, txt);
+                        el.dataset.twReplacedTo = el.firstChild.nodeValue = nextVal;
+                    } else if (el.dataset.twReplacedTo && txt !== el.dataset.twReplacedTo) {
+                        delete el.dataset.twReplacedTo;
+                        origTextMap.delete(el);
+                    }
+                } else if (el.dataset.twReplacedTo && txt === el.dataset.twReplacedTo && origTextMap.has(el)) {
                     el.firstChild.nodeValue = origTextMap.get(el);
                     delete el.dataset.twReplacedTo;
                     origTextMap.delete(el);
@@ -153,18 +197,43 @@
     }
 
     function bindLongPress(el, delayMs, onTrigger, handleContextMenu = false) {
-        let timer = null, triggered = false;
+        let timer = null, triggered = false, startX = 0, startY = 0;
         const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
-        el.addEventListener("touchstart", () => { triggered = false; clear(); timer = setTimeout(() => { triggered = true; onTrigger(); }, delayMs); }, { passive: true });
-        for (const ev of ["touchend", "touchmove", "touchcancel"]) el.addEventListener(ev, clear, { passive: true });
-        el.addEventListener("click", (e) => { if (triggered) { e.preventDefault(); e.stopPropagation(); triggered = false; } }, true);
-        if (handleContextMenu) el.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); clear(); if (!triggered) { triggered = true; onTrigger(); } });
+        el.addEventListener("touchstart", (e) => {
+            triggered = false;
+            clear();
+            const t = e.touches?.[0];
+            if (t) { startX = t.clientX; startY = t.clientY; }
+            timer = setTimeout(() => { triggered = true; onTrigger(); }, delayMs);
+        }, { passive: true });
+        el.addEventListener("touchmove", (e) => {
+            if (!timer) return;
+            const t = e.touches?.[0];
+            if (!t || Math.hypot(t.clientX - startX, t.clientY - startY) > 12) clear();
+        }, { passive: true });
+        for (const ev of ["touchend", "touchcancel"]) el.addEventListener(ev, clear, { passive: true });
+        el.addEventListener("click", (e) => {
+            if (triggered) { e.preventDefault(); e.stopPropagation(); triggered = false; }
+        }, true);
+        if (handleContextMenu) {
+            el.addEventListener("contextmenu", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                clear();
+                if (!triggered) { triggered = true; onTrigger(); }
+            });
+        }
     }
+    window.__TW_BIND_LONG_PRESS__ = bindLongPress;
 
     function bindHeaderLongPress() {
+        const triggerSettings = () => (window.TwitterBridge?.openSettingsWithHaptic?.() ?? window.TwitterBridge?.openSettings?.());
         for (const el of document.querySelectorAll('[data-testid="TopNavBar"] a[href="/home"], [data-testid="TopNavBar"] svg[data-tw-bird="true"], header a[href="/home"], [data-testid="BottomBar"] a[href="/home"]')) {
             const host = el.closest("a, div[role='button']") || el;
-            if (!host.dataset.twPressBound) { host.dataset.twPressBound = "true"; bindLongPress(host, 500, () => window.TwitterBridge?.openSettings()); }
+            if (!host.dataset.twPressBound) {
+                host.dataset.twPressBound = "true";
+                bindLongPress(host, 480, triggerSettings);
+            }
         }
     }
 
@@ -199,215 +268,47 @@
             item.dataset.twOwn = "1";
             item.setAttribute("data-tw-mod-settings-item", "true");
             item.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${BIRD_PATH}"></path></svg><span>Twitter Mod Settings</span>`;
-            item.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); window.TwitterBridge?.openSettings(); });
+            item.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); window.TwitterBridge?.openSettings?.(); });
             anchor.insertAdjacentElement("beforebegin", item);
             syncDrawerItemStyle(item, link, anchor);
         }
     }
 
-    function classifyHomeFeed(tab, key) {
-        if (key === "for you" || key === "following") return "CORE";
-        const href = (tab.getAttribute("href") || tab.querySelector("a")?.getAttribute("href") || "").toLowerCase();
-        const cached = window.__TW_CACHE__?.getFeedKind?.(key);
-        if (cached === "list" || href.includes("/lists/")) return "LIST";
-        return (cached === "suggested" || SUGGESTED_FEEDS.has(key)) ? "SUGGESTED" : "LIST";
-    }
-
-    function markAddFeedButton(tablist) {
-        for (const el of tablist.querySelectorAll('a, button, [role="button"]')) {
-            if (!el.closest('[role="tab"]') && !el.querySelector('[role="tab"]')) {
-                const target = el.closest('[role="tablist"] > *') || el;
-                if (!target.hasAttribute("data-tw-add-feed-btn")) { target.setAttribute("data-tw-add-feed-btn", "true"); target.style.order = "9999"; }
-            }
-        }
-        const sib = tablist.nextElementSibling;
-        if (sib && !sib.hasAttribute("data-tw-add-feed-btn") && !sib.querySelector('[role="tab"]') && sib.querySelector("svg") && sib.getBoundingClientRect().width <= 84) {
-            sib.setAttribute("data-tw-add-feed-btn", "true");
-        }
-    }
-
-    function handleHomeTabs(cfg) {
-        if (!location.pathname.startsWith("/home")) { switchedOnThisHomeVisit = userPickedTabOnVisit = false; return; }
-        if (lastKnownPath !== location.pathname) { switchedOnThisHomeVisit = userPickedTabOnVisit = false; homeVisitEnteredAt = Date.now(); tabsDirty = true; }
-        if (!tabsDirty && (switchedOnThisHomeVisit || userPickedTabOnVisit || Date.now() - homeVisitEnteredAt < 3000)) return;
-        const tablist = document.querySelector('[data-testid="primaryColumn"] [role="tablist"]') || document.querySelector('[role="tablist"]');
-        const tabs = tablist ? tablist.querySelectorAll('[role="tab"]') : [];
-        if (!tablist || tabs.length === 0) return;
-
-        if (!tablist.dataset.twTabTapBound) {
-            tablist.dataset.twTabTapBound = "1";
-            tablist.addEventListener("pointerdown", (e) => { if (e.isTrusted && e.target?.closest?.('[role="tab"]')) userPickedTabOnVisit = true; }, { passive: true });
-        }
-        const hidden = new Set((cfg.hiddenHomeFeeds || []).map((s) => String(s).trim().toLowerCase()));
-        const pinned = new Set((cfg.pinnedHomeFeeds || []).map((s) => String(s).trim().toLowerCase()));
-        const order = new Map((cfg.homeFeedOrder || []).map((s, i) => [String(s).trim().toLowerCase(), i]));
-        const entries = [];
-        for (let i = 0; i < tabs.length; i++) {
-            const tab = tabs[i], name = (tab.textContent || "").replace(/\s+/g, " ").trim();
-            if (!name) continue;
-            const key = name.toLowerCase(), kind = classifyHomeFeed(tab, key);
-            const target = tab.parentElement?.getAttribute("role") === "presentation" ? tab.parentElement : tab;
-            entries.push({ tab, target, name, key, kind, domIdx: i, visible: !hidden.has(key) && !(kind === "SUGGESTED" && cfg.stripSuggestedHomeFeeds !== false && !pinned.has(key)) });
-        }
-        if (entries.length === 0) return;
-        if (entries.every((e) => !e.visible)) entries[0].visible = true;
-
-        const sig = JSON.stringify(entries.map((e) => ({ name: e.name, kind: e.kind })));
-        if (sig !== lastReportedFeedsSig) { lastReportedFeedsSig = sig; window.TwitterBridge?.reportHomeFeeds?.(sig); }
-
-        const sorted = [...entries].sort((a, b) => (order.get(a.key) ?? 1000 + a.domIdx) - (order.get(b.key) ?? 1000 + b.domIdx));
-        sorted.forEach((e, idx) => {
-            const ord = String(idx);
-            if (e.target.style.order !== ord) e.target.style.order = ord;
-            if (e.visible) e.target.removeAttribute("data-tw-feed-hidden");
-            else if (e.target.getAttribute("data-tw-feed-hidden") !== "true") e.target.setAttribute("data-tw-feed-hidden", "true");
-        });
-        markAddFeedButton(tablist);
-        tabsDirty = false;
-
-        const visible = sorted.filter((e) => e.visible), activeVisible = visible.some((e) => e.tab.getAttribute("aria-selected") === "true");
-        if (visible.length > 0 && !userPickedTabOnVisit && (!switchedOnThisHomeVisit || !activeVisible)) {
-            const wantKey = String(cfg.defaultHomeFeed || "For you").trim().toLowerCase();
-            const exact = visible.find((e) => e.key === wantKey), pick = exact || (!activeVisible ? visible[0] : null);
-            if (pick && pick.tab.getAttribute("aria-selected") !== "true") pick.tab.click();
-            if (exact || wantKey === "for you" || wantKey === "following" || (Date.now() - homeVisitEnteredAt >= 3000)) switchedOnThisHomeVisit = true;
-        }
-    }
-
-    function resolveVideoTweetId(article, hasVideo) {
-        const quoteStatus = hasVideo.closest('[role="link"]')?.querySelector('a[href*="/status/"]')?.getAttribute("href")?.match(/\/status\/([0-9]+)/);
-        if (quoteStatus) return quoteStatus[1];
-        const links = article.querySelectorAll('a[href*="/status/"]');
-        for (const l of links) { const m = l.getAttribute("href")?.match(/\/status\/([0-9]+)$/); if (m) return m[1]; }
-        return links[0]?.getAttribute("href")?.match(/\/status\/([0-9]+)/)?.[1] || location.pathname.match(/\/status\/([0-9]+)/)?.[1] || null;
-    }
-
-    function collectCandidateTweets(roots, fullScan) {
-        if (fullScan) return document.querySelectorAll('article[data-testid="tweet"]');
-        const set = new Set();
-        for (const r of roots) {
-            if (!r.isConnected) continue;
-            const host = r.closest?.('article[data-testid="tweet"]');
-            if (host) { set.add(host); continue; }
-            if (r.matches?.('article[data-testid="tweet"]')) { set.add(r); continue; }
-            for (const a of (r.querySelectorAll?.('article[data-testid="tweet"]') || [])) set.add(a);
-        }
-        return set;
-    }
-
-    function createIconBtn(cls, label, onClick) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = cls;
-        btn.dataset.twOwn = "1";
-        btn.setAttribute("aria-label", label);
-        btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="${DOWNLOAD_PATH}"></path></svg>`;
-        btn.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); onClick(); });
-        return btn;
-    }
-
-    function enhanceTweets(cfg, roots, fullScan) {
-        for (const article of collectCandidateTweets(roots, fullScan)) {
-            if (cfg.verifiedBadgeMode === "HIDE_PAID_BLUE") {
-                for (const badge of article.querySelectorAll('[data-testid="icon-verified"]:not([data-tw-badge-checked])')) {
-                    const nameBox = badge.closest('[data-testid="User-Name"]') || article.querySelector('[data-testid="User-Name"]');
-                    const handle = nameBox?.querySelector('a[href^="/"]')?.getAttribute("href")?.split("/")[1];
-                    const paid = handle ? window.__TW_CACHE__?.isPaidBlueOnly(handle) : null;
-                    if (paid !== null && paid !== undefined) { badge.dataset.twBadgeChecked = "true"; if (paid) badge.setAttribute("data-tw-paid-blue", "true"); }
-                }
-            }
-            const hasVideo = article.querySelector('video, [data-testid="videoPlayer"], [data-testid="gifPlayer"]'), existingBtn = article.querySelector(".tw-mod-dl-btn");
-            if (cfg.enableVideoDownloader && hasVideo && !existingBtn) {
-                const tweetId = resolveVideoTweetId(article, hasVideo), actionGroup = article.querySelector('[role="group"]');
-                if (tweetId && actionGroup) {
-                    actionGroup.appendChild(createIconBtn("tw-mod-dl-btn", "Download video", () => {
-                        const cached = window.__TW_CACHE__?.getVideoUrl(tweetId), videoSrc = article.querySelector("video")?.getAttribute("src");
-                        const url = cached || (videoSrc && videoSrc.startsWith("https://") && !videoSrc.startsWith("blob:") ? videoSrc : null);
-                        if (url) window.TwitterBridge?.downloadMedia(url, `twitter_${tweetId}.mp4`);
-                        else window.TwitterBridge?.showToast("Video stream not cached yet—tap play once first");
-                    }));
-                }
-            } else if (!cfg.enableVideoDownloader && existingBtn) existingBtn.remove();
-
-            for (const a of article.querySelectorAll('a[href^="http"]')) {
-                if (cfg.unwrapTcoLinks && a.href.startsWith("https://t.co/") && !a.dataset.twUnwrapped) {
-                    const expanded = window.__TW_CACHE__?.getExpandedUrl(a.href);
-                    if (expanded) { a.href = expanded; a.dataset.twUnwrapped = "true"; }
-                }
-                if (!a.dataset.twLinkBound && !a.href.startsWith("https://t.co/") && !EXTERNAL_SKIP_RE.test(a.href)) {
-                    a.dataset.twLinkBound = "true";
-                    bindLongPress(a, 520, () => window.TwitterBridge?.showLinkActions(a.href), true);
-                }
-            }
-        }
-    }
-
-    const toOrigImageUrl = (src) => (!src || src.includes("name=orig")) ? src : (src.includes("name=") ? src.replace(/name=[^&]+/, "name=orig") : src + (src.includes("?") ? "&name=orig" : "?name=orig"));
-
-    function upgradeLightboxImages(cfg) {
-        const host = document.querySelector('[data-testid="swipeToDismiss"], [aria-labelledby="modal-header"]');
-        if (!host) return;
-        const imgs = host.querySelectorAll('img[src*="pbs.twimg.com/media"]');
-        if (cfg.forceOrigQualityImages) {
-            for (const img of imgs) {
-                if (!img.dataset.twOrigUpgraded && !img.src.includes("name=orig")) {
-                    const fallbackSrc = img.src;
-                    img.dataset.twOrigUpgraded = "1";
-                    img.addEventListener("error", () => { if (img.src !== fallbackSrc) img.src = fallbackSrc; }, { once: true });
-                    img.src = toOrigImageUrl(fallbackSrc);
-                }
-            }
-        }
-        const existingDl = host.querySelector(".tw-mod-img-dl-btn");
-        if (cfg.enableVideoDownloader && imgs.length > 0 && !existingDl) {
-            host.appendChild(createIconBtn("tw-mod-img-dl-btn", "Save original image", () => {
-                let bestImg = imgs[0], bestScore = -1;
-                for (const c of host.querySelectorAll('img[src*="pbs.twimg.com/media"]')) {
-                    const r = c.getBoundingClientRect(), vis = Math.max(0, Math.min(r.right, window.innerWidth) - Math.max(r.left, 0));
-                    if (vis > bestScore) { bestScore = vis; bestImg = c; }
-                }
-                const origUrl = toOrigImageUrl(bestImg?.src || "");
-                if (origUrl) window.TwitterBridge?.downloadMedia(origUrl, `twitter_img_${origUrl.match(/\/media\/([A-Za-z0-9_-]+)/)?.[1] || Date.now()}`);
-            }));
-        } else if (!cfg.enableVideoDownloader && existingDl) existingDl.remove();
-    }
-
-    function enforceVideoAutoplayPause(cfg, roots, fullScan) {
-        if (!cfg.disableVideoAutoplay) return;
-        for (const v of queryWithinRoots(roots, fullScan, "video")) {
-            if (!v.dataset.twAutoplayGuarded) {
-                v.dataset.twAutoplayGuarded = "true";
-                v.autoplay = false;
-                const player = v.closest('[data-testid="videoPlayer"], [data-testid="gifPlayer"]') || v;
-                player.addEventListener("pointerdown", () => { v.dataset.twUserPlayed = "true"; }, { passive: true });
-                v.addEventListener("play", () => { if (!v.dataset.twUserPlayed) v.pause(); });
-            }
-            if (!v.dataset.twUserPlayed && !v.paused) v.pause();
-        }
-    }
-
     function syncPullRefreshState() {
         const dialogOpen = Boolean(document.querySelector('[role="dialog"], [data-testid="swipeToDismiss"]'));
-        if (dialogOpen !== lastDialogOpen) { lastDialogOpen = dialogOpen; window.TwitterBridge?.setPullToRefreshModalOpen(dialogOpen); }
+        if (dialogOpen !== lastDialogOpen) {
+            lastDialogOpen = dialogOpen;
+            window.TwitterBridge?.setPullToRefreshModalOpen?.(dialogOpen);
+        }
         return dialogOpen;
     }
 
     function runDomPass() {
-        const cfg = getCfg(), fullScan = fullScanPending || lastKnownPath !== location.pathname;
+        const cfg = getCfg();
+        const pathChanged = lastKnownPath !== location.pathname;
+        const fullScan = fullScanPending || pathChanged;
+        const checkHeader = fullScan || headerDirty;
+        const checkDialog = fullScan || dialogDirty || Boolean(lastDialogOpen);
+        const checkTabs = fullScan || tabsDirty;
         const roots = fullScan ? null : Array.from(dirtyRoots);
-        fullScanPending = false;
+
+        fullScanPending = headerDirty = dialogDirty = false;
         dirtyRoots.clear();
 
         ensureStyleTag();
-        syncDatasetAndTheme(cfg);
-        updateBrandLogos(cfg.classicTwitterBranding !== false, roots, fullScan);
+        syncDatasetAndTheme(cfg, checkHeader);
+        updateBrandLogos(cfg.classicTwitterBranding !== false, roots, fullScan, checkHeader);
         rewriteUiTerminology(cfg.classicTwitterBranding !== false, roots, fullScan);
-        bindHeaderLongPress();
-        injectDrawerModSettingsEntry();
-        handleHomeTabs(cfg);
-        enhanceTweets(cfg, roots, fullScan);
-        if (syncPullRefreshState()) upgradeLightboxImages(cfg);
-        enforceVideoAutoplayPause(cfg, roots, fullScan);
+        if (checkHeader) {
+            bindHeaderLongPress();
+            injectDrawerModSettingsEntry();
+        }
+        if (window.__TW_FEATURES__.handleHomeTabs(cfg, checkTabs)) tabsDirty = false;
+        window.__TW_FEATURES__.enhanceTweetsAndProfiles(cfg, roots, fullScan);
+        if (checkDialog && syncPullRefreshState()) {
+            window.__TW_FEATURES__.upgradeLightboxImages(cfg);
+        }
+        window.__TW_FEATURES__.enforceVideoAutoplayPause(cfg, roots, fullScan);
         lastKnownPath = location.pathname;
     }
 
@@ -420,21 +321,37 @@
 
     const themeObserver = new MutationObserver(() => { themeDirty = true; schedulePass(); });
 
+    function hasTrackedAncestor(el) {
+        let p = el.parentElement;
+        while (p) {
+            if (dirtyRoots.has(p)) return true;
+            p = p.parentElement;
+        }
+        return false;
+    }
+
     const observer = new MutationObserver((records) => {
         let relevant = false;
         for (const rec of records) {
             if (rec.removedNodes.length > 0) {
-                if (lastDialogOpen) relevant = true;
-                if (rec.target?.closest?.('[role="tablist"]')) tabsDirty = relevant = true;
+                if (lastDialogOpen) { dialogDirty = relevant = true; }
+                if (rec.target?.closest?.('[role="tablist"]')) { tabsDirty = relevant = true; }
             }
             for (const n of rec.addedNodes) {
                 const el = n.nodeType === Node.ELEMENT_NODE ? n : (n.nodeType === Node.TEXT_NODE ? rec.target : null);
                 if (!el || el.nodeType !== Node.ELEMENT_NODE || el.dataset?.twOwn === "1") continue;
+                if (el.closest?.('[data-testid="app-text-transition-container"]')) continue;
                 relevant = true;
-                if (el.getAttribute?.("role") === "tab" || el.getAttribute?.("role") === "tablist" || el.closest?.('[role="tablist"]') || el.querySelector?.('[role="tablist"]')) tabsDirty = true;
-                if (!fullScanPending) {
+                const role = el.getAttribute?.("role");
+                const testId = el.getAttribute?.("data-testid");
+                if (role === "tab" || role === "tablist" || el.closest?.('[role="tablist"]') || el.querySelector?.('[role="tablist"]')) tabsDirty = true;
+                if (role === "dialog" || testId === "swipeToDismiss" || el.querySelector?.('[role="dialog"], [data-testid="swipeToDismiss"]')) dialogDirty = true;
+                if (role === "menu" || role === "banner" || el.tagName === "HEADER" || el.tagName === "NAV" || testId === "TopNavBar" || testId === "BottomBar" || testId === "Drawer" || el.querySelector?.('a[href^="/settings"], [data-testid="TopNavBar"], [data-testid="BottomBar"], header[role="banner"]')) {
+                    headerDirty = true;
+                }
+                if (!fullScanPending && !hasTrackedAncestor(el)) {
                     dirtyRoots.add(el);
-                    if (dirtyRoots.size > 45) { fullScanPending = true; dirtyRoots.clear(); }
+                    if (dirtyRoots.size > 60) { fullScanPending = true; dirtyRoots.clear(); }
                 }
             }
         }
@@ -443,6 +360,6 @@
     observer.observe(document, { childList: true, subtree: true });
 
     if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", () => { fullScanPending = themeDirty = true; runDomPass(); });
+        document.addEventListener("DOMContentLoaded", () => { fullScanPending = themeDirty = headerDirty = tabsDirty = dialogDirty = true; runDomPass(); });
     } else runDomPass();
 })();

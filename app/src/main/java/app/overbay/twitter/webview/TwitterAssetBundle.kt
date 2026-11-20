@@ -4,24 +4,28 @@ import android.content.Context
 import org.json.JSONObject
 
 /**
- * Loads and caches the injected JS and CSS assets from `app/src/main/assets/`.
+ * Process-cached bundle of injected JS and CSS assets from `app/src/main/assets/`.
  *
- * Static CSS is bundled once into [coreEngineScript] so live config hot-reloads
- * only transmit the compact JSON state payload.
+ * Static CSS and JS engines are loaded once per process so recompositions and WebView
+ * crash recoveries never re-read APK assets on the main thread.
  */
-class TwitterAssetBundle(context: Context) {
-
-    private val interceptorJs: String = readAsset(context, "twitter-interceptor.js")
-    private val domJs: String = readAsset(context, "twitter-dom.js")
-    private val quotedCss: String = JSONObject.quote(readAsset(context, "twitter-clean.css"))
-
+class TwitterAssetBundle private constructor(
+    interceptorJs: String,
+    featuresJs: String,
+    domJs: String,
+    quotedCss: String
+) {
     val coreEngineScript: String = buildString(
-        quotedCss.length + interceptorJs.length + domJs.length + 64
+        BRIDGE_SHIM_JS.length + quotedCss.length + interceptorJs.length + featuresJs.length + domJs.length + 96
     ) {
         append("window.__TWITTER_CLEAN_CSS__ = ")
         append(quotedCss)
         append(";\n")
+        append(BRIDGE_SHIM_JS)
+        append("\n;\n")
         append(interceptorJs)
+        append("\n;\n")
+        append(featuresJs)
         append("\n;\n")
         append(domJs)
     }
@@ -38,7 +42,48 @@ class TwitterAssetBundle(context: Context) {
         }
     }
 
-    private fun readAsset(context: Context, name: String): String {
-        return context.assets.open(name).bufferedReader().use { it.readText() }
+    companion object {
+        @Volatile
+        private var cached: TwitterAssetBundle? = null
+
+        fun getInstance(context: Context): TwitterAssetBundle {
+            return cached ?: synchronized(this) {
+                cached ?: loadFromAssets(context.applicationContext).also { cached = it }
+            }
+        }
+
+        private fun loadFromAssets(context: Context): TwitterAssetBundle {
+            val interceptorJs = readAsset(context, "twitter-interceptor.js")
+            val featuresJs = readAsset(context, "twitter-features.js")
+            val domJs = readAsset(context, "twitter-dom.js")
+            val quotedCss = JSONObject.quote(readAsset(context, "twitter-clean.css"))
+            return TwitterAssetBundle(interceptorJs, featuresJs, domJs, quotedCss)
+        }
+
+        private fun readAsset(context: Context, name: String): String {
+            return context.assets.open(name).bufferedReader().use { it.readText() }
+        }
+
+        internal const val NATIVE_PORT_NAME = "__twNativePort"
+
+        private val BRIDGE_SHIM_JS = """
+            (() => {
+                if (window.TwitterBridge) return;
+                const post = (payload) => {
+                    try { window.$NATIVE_PORT_NAME?.postMessage(JSON.stringify(payload)); } catch (_) {}
+                };
+                window.TwitterBridge = {
+                    openSettings: () => post({ type: "openSettings", haptic: false }),
+                    openSettingsWithHaptic: () => post({ type: "openSettings", haptic: true }),
+                    downloadMedia: (url, filenameHint) => post({ type: "downloadMedia", url: String(url || ""), filenameHint: String(filenameHint || "") }),
+                    showLinkActions: (url) => post({ type: "showLinkActions", url: String(url || "") }),
+                    showToast: (message) => post({ type: "showToast", message: String(message || "") }),
+                    setPullToRefreshModalOpen: (open) => post({ type: "setPullToRefreshModalOpen", open: Boolean(open) }),
+                    reportHomeFeeds: (feedsJson) => post({ type: "reportHomeFeeds", feedsJson: String(feedsJson || "") }),
+                    onThemeColorChanged: (hexColor) => post({ type: "onThemeColorChanged", hexColor: String(hexColor || "") }),
+                    reportStatsDelta: (ads, clutter) => post({ type: "reportStatsDelta", ads: Number(ads) || 0, clutter: Number(clutter) || 0 })
+                };
+            })();
+        """.trimIndent()
     }
 }
