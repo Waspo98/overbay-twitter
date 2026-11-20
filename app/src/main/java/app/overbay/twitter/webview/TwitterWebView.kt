@@ -26,6 +26,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
@@ -102,6 +103,8 @@ fun TwitterWebView(
 
     val configScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
     val coreScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
+    val ownedWebViewRef = remember { AtomicReference<WebView?>(null) }
+    val ownedSwipeRefreshRef = remember { AtomicReference<SwipeRefreshLayout?>(null) }
     val lastSeededStateRef = remember { AtomicReference<Pair<String, Boolean>?>(null) }
     val baseUserAgentRef = remember { AtomicReference<String?>(null) }
     var webViewAttached by remember { mutableStateOf(false) }
@@ -127,15 +130,21 @@ fun TwitterWebView(
         themeColorRef.set(initialThemeColorInt)
     }
 
+    LaunchedEffect(webViewAttached) {
+        if (webViewAttached) {
+            latestOnWebViewAttached()
+        }
+    }
+
     LaunchedEffect(webViewAttached, config.disableVideoAutoplay) {
-        val wv = controller.webView ?: return@LaunchedEffect
+        val wv = ownedWebViewRef.get() ?: return@LaunchedEffect
         if (wv.settings.mediaPlaybackRequiresUserGesture != config.disableVideoAutoplay) {
             wv.settings.mediaPlaybackRequiresUserGesture = config.disableVideoAutoplay
         }
     }
 
     LaunchedEffect(webViewAttached, isFullyUnfolded) {
-        val wv = controller.webView ?: return@LaunchedEffect
+        val wv = ownedWebViewRef.get() ?: return@LaunchedEffect
         baseUserAgentRef.get()?.let { baseUa ->
             val targetUa = TwitterRequestBlocker.buildEffectiveUserAgent(baseUa, isFullyUnfolded)
             if (wv.settings.userAgentString != targetUa) {
@@ -145,7 +154,7 @@ fun TwitterWebView(
     }
 
     LaunchedEffect(webViewAttached, configJson, isFullyUnfolded) {
-        val wv = controller.webView ?: return@LaunchedEffect
+        val wv = ownedWebViewRef.get() ?: return@LaunchedEffect
         val stateKey = configJson to isFullyUnfolded
         if (lastSeededStateRef.getAndSet(stateKey) != stateKey) {
             registerConfigStartScript(wv, configJson, isFullyUnfolded)
@@ -156,9 +165,9 @@ fun TwitterWebView(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> controller.webView?.onResume()
+                Lifecycle.Event.ON_RESUME -> ownedWebViewRef.get()?.onResume()
                 Lifecycle.Event.ON_PAUSE -> {
-                    controller.webView?.onPause()
+                    ownedWebViewRef.get()?.onPause()
                     CookieManager.getInstance().flush()
                 }
                 Lifecycle.Event.ON_STOP -> CookieManager.getInstance().flush()
@@ -178,13 +187,13 @@ fun TwitterWebView(
                 configScriptHandlerRef.set(null)
                 coreScriptHandlerRef.set(null)
             }
-            val wv = controller.webView
+            val wv = ownedWebViewRef.getAndSet(null)
+            val sr = ownedSwipeRefreshRef.getAndSet(null)
             if (wv != null && WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
                 runCatching { WebViewCompat.removeWebMessageListener(wv, TwitterAssetBundle.NATIVE_PORT_NAME) }
             }
             wv?.destroy()
-            controller.webView = null
-            controller.swipeRefresh = null
+            controller.detachIfOwned(wv, sr)
         }
     }
 
@@ -320,14 +329,14 @@ fun TwitterWebView(
                 addView(webView)
             }
 
-            controller.webView = webView
-            controller.swipeRefresh = swipeRefresh
+            ownedWebViewRef.set(webView)
+            ownedSwipeRefreshRef.set(swipeRefresh)
+            controller.attach(webView, swipeRefresh)
             controller.applyThemeColor(initialThemeColorInt)
             controller.updatePullToRefresh(pathBlocked = isPullRefreshBlockedPath(initialUrl))
             controller.lastKnownUrl = initialUrl
             webView.loadUrl(initialUrl)
             webViewAttached = true
-            latestOnWebViewAttached()
             swipeRefresh
         }
     )

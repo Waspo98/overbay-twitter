@@ -21,7 +21,12 @@ class TwitterWebController {
     private var pullBlockedByModal = false
 
     fun reload() {
-        webView?.reload()
+        val wv = webView ?: return
+        if (wv.url.isNullOrBlank()) {
+            wv.loadUrl(lastKnownUrl)
+        } else {
+            wv.reload()
+        }
     }
 
     fun goBack() {
@@ -40,6 +45,20 @@ class TwitterWebController {
 
     fun performLongPressHaptic() {
         webView?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    }
+
+    internal fun attach(webView: WebView, swipeRefresh: SwipeRefreshLayout) {
+        this.webView = webView
+        this.swipeRefresh = swipeRefresh
+    }
+
+    internal fun detachIfOwned(ownedWebView: WebView?, ownedSwipeRefresh: SwipeRefreshLayout?) {
+        if (ownedWebView != null && webView === ownedWebView) {
+            webView = null
+        }
+        if (ownedSwipeRefresh != null && swipeRefresh === ownedSwipeRefresh) {
+            swipeRefresh = null
+        }
     }
 
     internal fun applyThemeColor(colorInt: Int) {

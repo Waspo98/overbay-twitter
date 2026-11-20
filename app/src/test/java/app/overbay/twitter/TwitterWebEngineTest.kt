@@ -107,6 +107,8 @@ class TwitterWebEngineTest {
         assertTrue(interceptor.contains("reportStatsDelta"))
         assertTrue(interceptor.contains("url.includes(\"Bookmarks\")"))
         assertTrue(interceptor.contains("raw.includes(\"video_info\")"))
+        assertFalse(interceptor.contains("videoListCache"))
+        assertFalse(interceptor.contains("__TW_STATS__"))
 
         // Feature engine contracts
         assertTrue(features.contains("window.__TW_FEATURES__"))
@@ -118,6 +120,7 @@ class TwitterWebEngineTest {
         assertTrue(dom.contains("[role='menuitem'] span"))
         assertTrue(dom.contains("Math.hypot"))
         assertTrue(dom.contains("delete svg.dataset.twLogoChecked"))
+        assertFalse(dom.contains("openSettingsWithHaptic?.() ??"))
 
         // CSS contracts
         assertTrue(css.contains("removeBookmark"))

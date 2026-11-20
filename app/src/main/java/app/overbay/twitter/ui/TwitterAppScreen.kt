@@ -76,7 +76,6 @@ fun TwitterAppScreen(
 ) {
     val config by repository.config.collectAsStateWithLifecycle()
     val detectedHomeFeeds by repository.detectedHomeFeeds.collectAsStateWithLifecycle()
-    val persistedThemeColor by repository.lastThemeColor.collectAsStateWithLifecycle()
     val configJson = remember(config) { repository.toJsonString(config) }
     val controller = remember { TwitterWebController() }
     val context = LocalContext.current
@@ -104,7 +103,7 @@ fun TwitterAppScreen(
 
     var webThemeColorInt by remember {
         mutableIntStateOf(
-            persistedThemeColor ?: if (systemDark) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+            repository.lastThemeColor.value ?: if (systemDark) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
         )
     }
     val surfaceTheme = remember(webThemeColorInt) { TwitterSurfaceTheme.fromColorInt(webThemeColorInt) }
@@ -236,7 +235,11 @@ fun TwitterAppScreen(
                     onRendererCrash = {
                         isWebViewAttached = false
                         customVideoView = null
+                        canGoBack = false
                         mainFrameError = null
+                        controller.customViewCallback = null
+                        controller.updatePullToRefresh(modalOpen = false)
+                        appliedGraphQlConfig = repository.config.value
                         webViewEpoch++
                     },
                     onPullRefresh = { appliedGraphQlConfig = repository.config.value },

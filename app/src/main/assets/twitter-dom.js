@@ -227,7 +227,10 @@
     window.__TW_BIND_LONG_PRESS__ = bindLongPress;
 
     function bindHeaderLongPress() {
-        const triggerSettings = () => (window.TwitterBridge?.openSettingsWithHaptic?.() ?? window.TwitterBridge?.openSettings?.());
+        const triggerSettings = () => {
+            if (window.TwitterBridge?.openSettingsWithHaptic) window.TwitterBridge.openSettingsWithHaptic();
+            else window.TwitterBridge?.openSettings?.();
+        };
         for (const el of document.querySelectorAll('[data-testid="TopNavBar"] a[href="/home"], [data-testid="TopNavBar"] svg[data-tw-bird="true"], header a[href="/home"], [data-testid="BottomBar"] a[href="/home"]')) {
             const host = el.closest("a, div[role='button']") || el;
             if (!host.dataset.twPressBound) {

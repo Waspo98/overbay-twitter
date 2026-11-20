@@ -3,7 +3,7 @@
     window.__TW_INTERCEPTOR_INSTALLED__ = true;
 
     const MAX_VIDEOS = 600, MAX_LINKS = 1200, MAX_USERS = 1200, MAX_FOCAL = 100;
-    const videoCache = new Map(), videoListCache = new Map(), linkCache = new Map();
+    const videoCache = new Map(), linkCache = new Map();
     const userCache = new Map(), feedKindCache = new Map(), focalCache = new Map();
 
     const TRACKING_PARAMS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id", "fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "igsh", "_hsenc", "_hsmi", "vero_id", "mkt_tok"];
@@ -11,9 +11,6 @@
     const CAROUSEL_PREFIXES = ["who-to-follow-", "who-to-subscribe-", "communities-to-join-", "topics-to-follow-", "creator-subscriptions-", "inline-prompt-", "relevance-prompt-", "list-to-follow-", "connect-", "suggested-"];
     const NON_TIMELINE_GQL_RE = /\/i\/api\/graphql\/[^/?]+\/(Favorite|Unfavorite|CreateBookmark|DeleteBookmark|CreateRetweet|DeleteRetweet|DataSaver|BadgeCount|PutClientEducationFlag|SubscribeTo|UnsubscribeFrom|ClientEvent|AccountBalance|ViewerSettings)/i;
     const SKIP_API2_RE = /\/i\/api\/2\/(badge_count|live_pipeline|notifications\/view|dm\/|client_event|onboarding|keyregistry|fleets|hashflags)/i;
-
-    const sessionStats = { ads: 0, clutter: 0 };
-    window.__TW_STATS__ = sessionStats;
 
     function lruSet(map, key, value, max) {
         if (!key || value === undefined || value === null) return;
@@ -23,11 +20,7 @@
     }
 
     window.__TW_CACHE__ = {
-        getVideoUrl: (tweetId, idx = 0) => {
-            const list = videoListCache.get(String(tweetId));
-            return (list && list.length > 0) ? (list[idx] || list[0]) : (videoCache.get(String(tweetId)) || null);
-        },
-        getVideoUrls: (tweetId) => videoListCache.get(String(tweetId)) || (videoCache.has(String(tweetId)) ? [videoCache.get(String(tweetId))] : []),
+        getVideoUrl: (tweetId) => videoCache.get(String(tweetId)) || null,
         getExpandedUrl: (tcoUrl) => linkCache.get(String(tcoUrl)) || null,
         getFeedKind: (name) => feedKindCache.get(String(name || "").trim().toLowerCase()) || null,
         isPaidBlueOnly: (handle) => {
@@ -141,23 +134,20 @@
         if (user) indexUserNode(user);
         for (const u of getTweetUrls(tweet)) if (u?.url && u?.expanded_url) lruSet(linkCache, u.url, cleanUrl(u.expanded_url), MAX_LINKS);
 
-        const foundVideos = [];
+        let resolvedVideo = tweetId ? (videoCache.get(String(tweetId)) || null) : null;
         const media = tweet.legacy?.extended_entities?.media || tweet.legacy?.entities?.media;
         if (Array.isArray(media)) {
             for (const m of media) {
                 if (m?.url && m?.expanded_url) lruSet(linkCache, m.url, cleanUrl(m.expanded_url), MAX_LINKS);
-                const mp4 = bestMp4FromVariants(m?.video_info?.variants);
-                if (mp4) foundVideos.push(mp4);
+                if (!resolvedVideo) resolvedVideo = bestMp4FromVariants(m?.video_info?.variants);
             }
         }
-        if (foundVideos.length === 0) { const cardUrl = extractCardVideoUrl(tweet); if (cardUrl) foundVideos.push(cardUrl); }
+        if (!resolvedVideo) resolvedVideo = extractCardVideoUrl(tweet);
         const rtVideo = tweet.legacy?.retweeted_status_result?.result ? indexTweetTree(tweet.legacy.retweeted_status_result.result) : null;
         const qtVideo = tweet.quoted_status_result?.result ? indexTweetTree(tweet.quoted_status_result.result) : null;
-        const finalVideo = foundVideos[0] || rtVideo || qtVideo;
-        if (tweetId && finalVideo) {
-            const idKey = String(tweetId);
-            if (!videoCache.has(idKey)) lruSet(videoCache, idKey, finalVideo, MAX_VIDEOS);
-            if (foundVideos.length > 0) lruSet(videoListCache, idKey, foundVideos, MAX_VIDEOS);
+        const finalVideo = resolvedVideo || rtVideo || qtVideo;
+        if (tweetId && finalVideo && !videoCache.has(String(tweetId))) {
+            lruSet(videoCache, String(tweetId), finalVideo, MAX_VIDEOS);
         }
         return finalVideo;
     }
@@ -321,8 +311,6 @@
         const cfg = getCfg(), state = { mutated: false, adsDelta: 0, clutterDelta: 0 };
         walkAndProcess(obj, url || "", cfg, getCompiledMutes(cfg), state, 0);
         if (state.adsDelta > 0 || state.clutterDelta > 0) {
-            sessionStats.ads += state.adsDelta;
-            sessionStats.clutter += state.clutterDelta;
             window.TwitterBridge?.reportStatsDelta?.(state.adsDelta, state.clutterDelta);
         }
         return { obj, mutated: state.mutated };
