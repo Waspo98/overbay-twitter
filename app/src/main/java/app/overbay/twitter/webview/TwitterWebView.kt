@@ -1,25 +1,19 @@
 package app.overbay.twitter.webview
 
 import android.annotation.SuppressLint
-import android.content.Intent
 import android.content.pm.ApplicationInfo
-import android.graphics.Bitmap
 import android.net.Uri
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
-import android.webkit.MimeTypeMap
 import android.webkit.ValueCallback
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,12 +26,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.ScriptHandler
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import app.overbay.twitter.bridge.TwitterNativeBridge
 import app.overbay.twitter.model.TwitterModConfig
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 private val ORIGIN_ALLOWLIST = setOf(
@@ -51,6 +45,7 @@ private val ORIGIN_ALLOWLIST = setOf(
 @Composable
 fun TwitterWebView(
     initialUrl: String,
+    initialThemeColorInt: Int,
     config: TwitterModConfig,
     configJson: String,
     isFullyUnfolded: Boolean,
@@ -63,15 +58,20 @@ fun TwitterWebView(
     modifier: Modifier = Modifier,
     onReportHomeFeeds: (String) -> Unit = {},
     onThemeColorChange: (Int) -> Unit = {},
+    onStatsDelta: (Int, Int) -> Unit = { _, _ -> },
+    onMainFrameError: (String?) -> Unit = {},
+    onRendererCrash: () -> Unit = {},
+    onPullRefresh: () -> Unit = {},
     onWebViewAttached: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val assetBundle = remember(context) { TwitterAssetBundle(context) }
+    val assetBundle = remember(context) { TwitterAssetBundle.getInstance(context) }
 
     val configRef = remember { AtomicReference(config) }
     val configJsonRef = remember { AtomicReference(configJson) }
     val isUnfoldedRef = remember { AtomicReference(isFullyUnfolded) }
+    val themeColorRef = remember { AtomicInteger(initialThemeColorInt) }
 
     val latestOnOpenSettings by rememberUpdatedState(onOpenSettings)
     val latestOnShowLinkActions by rememberUpdatedState(onShowLinkActions)
@@ -80,13 +80,23 @@ fun TwitterWebView(
     val latestOnFirstLoad by rememberUpdatedState(onFirstLoadComplete)
     val latestOnReportHomeFeeds by rememberUpdatedState(onReportHomeFeeds)
     val latestOnThemeColorChange by rememberUpdatedState(onThemeColorChange)
+    val latestOnStatsDelta by rememberUpdatedState(onStatsDelta)
+    val latestOnMainFrameError by rememberUpdatedState(onMainFrameError)
+    val latestOnRendererCrash by rememberUpdatedState(onRendererCrash)
+    val latestOnPullRefresh by rememberUpdatedState(onPullRefresh)
     val latestOnWebViewAttached by rememberUpdatedState(onWebViewAttached)
 
     var pendingFileCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
-    val fileChooserLauncher = rememberLauncherForActivityResult(
+    val multiFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
         pendingFileCallback?.onReceiveValue(if (uris.isEmpty()) null else uris.toTypedArray())
+        pendingFileCallback = null
+    }
+    val singleFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        pendingFileCallback?.onReceiveValue(if (uri == null) null else arrayOf(uri))
         pendingFileCallback = null
     }
 
@@ -94,6 +104,7 @@ fun TwitterWebView(
     val coreScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
     val lastSeededStateRef = remember { AtomicReference<Pair<String, Boolean>?>(null) }
     val baseUserAgentRef = remember { AtomicReference<String?>(null) }
+    var webViewAttached by remember { mutableStateOf(false) }
 
     fun registerConfigStartScript(webView: WebView, json: String, unfolded: Boolean) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
@@ -108,22 +119,33 @@ fun TwitterWebView(
         configScriptHandlerRef.set(handler)
     }
 
-    // Synchronous zero-latency config & posture sync upon committed composition.
+    // Keep atomic refs fresh for background IO-thread callbacks without invoking JNI on every recompose.
     SideEffect {
         configRef.set(config)
         configJsonRef.set(configJson)
         isUnfoldedRef.set(isFullyUnfolded)
+        themeColorRef.set(initialThemeColorInt)
+    }
 
-        val wv = controller.webView ?: return@SideEffect
+    LaunchedEffect(webViewAttached, config.disableVideoAutoplay) {
+        val wv = controller.webView ?: return@LaunchedEffect
         if (wv.settings.mediaPlaybackRequiresUserGesture != config.disableVideoAutoplay) {
             wv.settings.mediaPlaybackRequiresUserGesture = config.disableVideoAutoplay
         }
+    }
+
+    LaunchedEffect(webViewAttached, isFullyUnfolded) {
+        val wv = controller.webView ?: return@LaunchedEffect
         baseUserAgentRef.get()?.let { baseUa ->
             val targetUa = TwitterRequestBlocker.buildEffectiveUserAgent(baseUa, isFullyUnfolded)
             if (wv.settings.userAgentString != targetUa) {
                 wv.settings.userAgentString = targetUa
             }
         }
+    }
+
+    LaunchedEffect(webViewAttached, configJson, isFullyUnfolded) {
+        val wv = controller.webView ?: return@LaunchedEffect
         val stateKey = configJson to isFullyUnfolded
         if (lastSeededStateRef.getAndSet(stateKey) != stateKey) {
             registerConfigStartScript(wv, configJson, isFullyUnfolded)
@@ -156,7 +178,11 @@ fun TwitterWebView(
                 configScriptHandlerRef.set(null)
                 coreScriptHandlerRef.set(null)
             }
-            controller.webView?.destroy()
+            val wv = controller.webView
+            if (wv != null && WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+                runCatching { WebViewCompat.removeWebMessageListener(wv, TwitterAssetBundle.NATIVE_PORT_NAME) }
+            }
+            wv?.destroy()
             controller.webView = null
             controller.swipeRefresh = null
         }
@@ -173,15 +199,15 @@ fun TwitterWebView(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                setBackgroundColor(0xFF000000.toInt())
+                setBackgroundColor(initialThemeColorInt)
 
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
                     useWideViewPort = true
                     loadWithOverviewMode = true
-                    setSupportZoom(true)
-                    builtInZoomControls = true
+                    setSupportZoom(false)
+                    builtInZoomControls = false
                     displayZoomControls = false
                     allowFileAccess = false
                     allowContentAccess = false
@@ -201,20 +227,39 @@ fun TwitterWebView(
                     setAcceptThirdPartyCookies(selfWebView, true)
                 }
 
-                addJavascriptInterface(
-                    TwitterNativeBridge(
-                        context = ctx.applicationContext,
-                        onOpenSettings = { latestOnOpenSettings() },
-                        onShowLinkActions = { url -> latestOnShowLinkActions(url) },
-                        onPullToRefreshModalChange = { open -> controller.updatePullToRefresh(modalOpen = open) },
-                        onReportHomeFeeds = { json -> latestOnReportHomeFeeds(json) },
-                        onThemeColorChange = { colorInt ->
-                            controller.applyThemeColor(colorInt)
-                            latestOnThemeColorChange(colorInt)
-                        }
-                    ),
-                    "TwitterBridge"
+                val bridge = TwitterNativeBridge(
+                    context = ctx.applicationContext,
+                    onOpenSettings = { haptic ->
+                        if (haptic) controller.performLongPressHaptic()
+                        latestOnOpenSettings()
+                    },
+                    onShowLinkActions = { url ->
+                        controller.performLongPressHaptic()
+                        latestOnShowLinkActions(url)
+                    },
+                    onPullToRefreshModalChange = { open -> controller.updatePullToRefresh(modalOpen = open) },
+                    onReportHomeFeeds = { json -> latestOnReportHomeFeeds(json) },
+                    onThemeColorChange = { colorInt ->
+                        themeColorRef.set(colorInt)
+                        controller.applyThemeColor(colorInt)
+                        latestOnThemeColorChange(colorInt)
+                    },
+                    onStatsDelta = { ads, clutter -> latestOnStatsDelta(ads, clutter) }
                 )
+
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+                    WebViewCompat.addWebMessageListener(
+                        this,
+                        TwitterAssetBundle.NATIVE_PORT_NAME,
+                        ORIGIN_ALLOWLIST
+                    ) { _, message, sourceOrigin, isMainFrame, _ ->
+                        if (!isMainFrame) return@addWebMessageListener
+                        if (!TwitterRequestBlocker.isInternalTwitterHost(sourceOrigin.host.orEmpty())) return@addWebMessageListener
+                        message.data?.let { bridge.handleWebMessage(it) }
+                    }
+                } else {
+                    addJavascriptInterface(bridge, "TwitterBridge")
+                }
 
                 val docStartSupported = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
                 if (docStartSupported) {
@@ -232,130 +277,56 @@ fun TwitterWebView(
                     coreScriptHandlerRef.set(coreHandler)
                 }
 
-                webViewClient = object : WebViewClient() {
-                    override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
-                        super.onPageStarted(view, url, favicon)
-                        if (!docStartSupported) {
-                            view.evaluateJavascript(
-                                assetBundle.buildConfigSeedScript(configJsonRef.get(), isUnfoldedRef.get()),
-                                null
-                            )
-                            view.evaluateJavascript(assetBundle.coreEngineScript, null)
-                        }
-                        controller.updatePullToRefresh(
-                            pathBlocked = isPullRefreshBlockedPath(url),
-                            modalOpen = false
-                        )
-                        latestOnCanGoBack(view.canGoBack())
-                    }
+                webViewClient = TwitterWebViewClient(
+                    context = ctx,
+                    assetBundle = assetBundle,
+                    controller = controller,
+                    docStartSupported = docStartSupported,
+                    configRef = configRef,
+                    configJsonRef = configJsonRef,
+                    isUnfoldedRef = isUnfoldedRef,
+                    themeColorRef = themeColorRef,
+                    onCanGoBackChange = { latestOnCanGoBack(it) },
+                    onFirstLoadComplete = { latestOnFirstLoad() },
+                    onMainFrameError = { latestOnMainFrameError(it) },
+                    onRendererCrash = { latestOnRendererCrash() }
+                )
 
-                    override fun onPageCommitVisible(view: WebView, url: String?) {
-                        super.onPageCommitVisible(view, url)
-                        latestOnFirstLoad()
-                    }
-
-                    override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
-                        super.doUpdateVisitedHistory(view, url, isReload)
-                        if (view != null) {
-                            latestOnCanGoBack(view.canGoBack())
-                        }
-                        controller.updatePullToRefresh(pathBlocked = isPullRefreshBlockedPath(url))
-                    }
-
-                    override fun onPageFinished(view: WebView, url: String?) {
-                        super.onPageFinished(view, url)
-                        controller.swipeRefresh?.isRefreshing = false
-                        CookieManager.getInstance().flush()
-                        latestOnCanGoBack(view.canGoBack())
-                        latestOnFirstLoad()
-                    }
-
-                    override fun shouldInterceptRequest(
-                        view: WebView,
-                        request: WebResourceRequest
-                    ): WebResourceResponse? {
-                        if (configRef.get().blockAds && TwitterRequestBlocker.shouldBlockTelemetryOrAd(request.url.toString())) {
-                            return TwitterRequestBlocker.emptyJsonResponse()
-                        }
-                        return super.shouldInterceptRequest(view, request)
-                    }
-
-                    override fun shouldOverrideUrlLoading(
-                        view: WebView,
-                        request: WebResourceRequest
-                    ): Boolean {
-                        if (!request.isForMainFrame) return false
-                        val uri = request.url
-                        val scheme = uri.scheme?.lowercase().orEmpty()
-                        val host = uri.host.orEmpty()
-
-                        if (scheme == "https" && TwitterRequestBlocker.isInternalTwitterHost(host)) {
-                            return false
-                        }
-                        if (scheme == "http" || scheme == "https") {
-                            TwitterRequestBlocker.openExternalUrl(
-                                context = ctx,
-                                rawUrl = uri.toString(),
-                                useCustomTab = configRef.get().openLinksInCustomTab
-                            )
-                            return true
-                        }
-                        if (scheme == "mailto" || scheme == "tel") {
-                            runCatching {
-                                ctx.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                            }
-                            return true
-                        }
-                        return true
-                    }
-                }
-
-                webChromeClient = object : WebChromeClient() {
-                    override fun onShowFileChooser(
-                        webView: WebView?,
-                        filePathCallback: ValueCallback<Array<Uri>>?,
-                        fileChooserParams: FileChooserParams?
-                    ): Boolean {
+                webChromeClient = TwitterWebChromeClient(
+                    controller = controller,
+                    onLaunchFileChooser = { callback, mimeTypes, allowMultiple ->
                         pendingFileCallback?.onReceiveValue(null)
-                        pendingFileCallback = filePathCallback
-                        val mimeTypes = TwitterRequestBlocker.normalizeAcceptTypes(
-                            fileChooserParams?.acceptTypes
-                        ) { ext ->
-                            MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+                        pendingFileCallback = callback
+                        val launched = runCatching {
+                            if (allowMultiple) multiFileLauncher.launch(mimeTypes)
+                            else singleFileLauncher.launch(mimeTypes)
                         }
-                        runCatching { fileChooserLauncher.launch(mimeTypes) }
-                            .onFailure {
-                                pendingFileCallback?.onReceiveValue(null)
-                                pendingFileCallback = null
-                            }
-                        return true
-                    }
-
-                    override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
-                        if (view == null) return
-                        controller.customViewCallback = callback
-                        latestOnCustomView(view)
-                    }
-
-                    override fun onHideCustomView() {
-                        controller.customViewCallback = null
-                        latestOnCustomView(null)
-                    }
-                }
+                        if (launched.isFailure) {
+                            pendingFileCallback?.onReceiveValue(null)
+                            pendingFileCallback = null
+                        }
+                    },
+                    onCustomViewChange = { latestOnCustomView(it) }
+                )
             }
 
-            val swipeRefresh = SwipeRefreshLayout(ctx).apply {
+            val swipeRefresh = TwitterSwipeRefreshLayout(ctx).apply {
                 setColorSchemeColors(0xFF1DA1F2.toInt())
-                setProgressBackgroundColorSchemeColor(0xFF192734.toInt())
                 setOnChildScrollUpCallback { _, _ -> webView.scrollY > 0 || webView.canScrollVertically(-1) }
-                setOnRefreshListener { webView.reload() }
+                setOnRefreshListener {
+                    latestOnPullRefresh()
+                    webView.reload()
+                }
                 addView(webView)
             }
 
             controller.webView = webView
             controller.swipeRefresh = swipeRefresh
+            controller.applyThemeColor(initialThemeColorInt)
             controller.updatePullToRefresh(pathBlocked = isPullRefreshBlockedPath(initialUrl))
+            controller.lastKnownUrl = initialUrl
             webView.loadUrl(initialUrl)
+            webViewAttached = true
             latestOnWebViewAttached()
             swipeRefresh
         }

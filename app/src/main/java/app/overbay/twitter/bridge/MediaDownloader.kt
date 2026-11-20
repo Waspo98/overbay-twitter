@@ -17,6 +17,13 @@ object MediaDownloader {
     private val allowedHosts = setOf("video.twimg.com", "pbs.twimg.com", "ton.twimg.com")
     private val knownFormats = setOf("mp4", "png", "webp", "gif", "jpg", "jpeg")
 
+    val successToastMessage: String
+        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            "Saving to Downloads/Twitter..."
+        } else {
+            "Saving media..."
+        }
+
     fun enqueue(context: Context, rawUrl: String, filenameHint: String): Result<Long> {
         val uri = runCatching { rawUrl.toUri() }.getOrNull()
             ?: return Result.failure(IllegalArgumentException("Invalid media URL"))

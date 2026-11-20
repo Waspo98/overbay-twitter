@@ -3,4 +3,7 @@
     <cloud-backup>
         <include domain="sharedpref" path="twitter_mod_prefs.xml" />
     </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="twitter_mod_prefs.xml" />
+    </device-transfer>
 </data-extraction-rules>

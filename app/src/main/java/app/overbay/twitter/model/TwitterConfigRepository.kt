@@ -32,6 +32,9 @@ class TwitterConfigRepository(
     private val _detectedHomeFeeds = MutableStateFlow(loadDetectedFeeds())
     val detectedHomeFeeds: StateFlow<List<DetectedHomeFeed>> = _detectedHomeFeeds.asStateFlow()
 
+    private val _lastThemeColor = MutableStateFlow(loadLastThemeColor())
+    val lastThemeColor: StateFlow<Int?> = _lastThemeColor.asStateFlow()
+
     private fun loadInitial(): TwitterModConfig {
         val raw = prefs.getString(KEY_CONFIG_JSON, null) ?: return TwitterModConfig()
         return decodeConfigJson(raw)
@@ -41,6 +44,20 @@ class TwitterConfigRepository(
         val raw = prefs.getString(KEY_DETECTED_FEEDS_JSON, null) ?: return DetectedHomeFeed.DEFAULTS
         val decoded = runCatching { json.decodeFromString<List<DetectedHomeFeed>>(raw) }.getOrNull()
         return DetectedHomeFeed.normalizeList(decoded.orEmpty())
+    }
+
+    private fun loadLastThemeColor(): Int? {
+        return if (prefs.contains(KEY_LAST_THEME_COLOR)) {
+            prefs.getInt(KEY_LAST_THEME_COLOR, 0)
+        } else {
+            null
+        }
+    }
+
+    fun updateLastThemeColor(colorInt: Int) {
+        if (_lastThemeColor.value == colorInt) return
+        _lastThemeColor.value = colorInt
+        prefs.edit { putInt(KEY_LAST_THEME_COLOR, colorInt) }
     }
 
     fun updateConfig(transform: (TwitterModConfig) -> TwitterModConfig) {
@@ -162,6 +179,7 @@ class TwitterConfigRepository(
         private const val PREFS_NAME = "twitter_mod_prefs"
         private const val KEY_CONFIG_JSON = "config_json"
         private const val KEY_DETECTED_FEEDS_JSON = "detected_home_feeds_json"
+        private const val KEY_LAST_THEME_COLOR = "last_theme_color_int"
 
         @Volatile
         private var instance: TwitterConfigRepository? = null

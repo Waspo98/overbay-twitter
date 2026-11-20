@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import app.overbay.twitter.R
 import app.overbay.twitter.model.DetectedHomeFeed
+import app.overbay.twitter.model.SessionFilterStats
 import app.overbay.twitter.model.TwitterModConfig
 import app.overbay.twitter.ui.theme.TwitterBlue
 
@@ -59,6 +60,7 @@ import app.overbay.twitter.ui.theme.TwitterBlue
 fun TwitterModSettingsSheet(
     config: TwitterModConfig,
     detectedHomeFeeds: List<DetectedHomeFeed>,
+    sessionStats: SessionFilterStats,
     pendingReload: Boolean,
     onSelectDefaultFeed: (String) -> Unit,
     onToggleFeedVisibility: (DetectedHomeFeed, Boolean) -> Unit,
@@ -384,7 +386,8 @@ fun TwitterModSettingsSheet(
                         Text("Reload Feed")
                     }
                 }
-                Spacer(modifier = Modifier.height(20.dp))
+                ModSettingsFooter(sessionStats = sessionStats)
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     }

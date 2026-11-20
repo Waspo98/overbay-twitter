@@ -4,12 +4,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -21,11 +27,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import app.overbay.twitter.BuildConfig
+import app.overbay.twitter.R
+import app.overbay.twitter.model.SessionFilterStats
 import app.overbay.twitter.model.VerifiedBadgeMode
+import app.overbay.twitter.ui.theme.TwitterBlue
 
 @Composable
 fun SettingsSectionCard(
@@ -47,9 +58,7 @@ fun SettingsSectionCard(
             modifier = Modifier.padding(horizontal = 6.dp)
         )
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp)),
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
@@ -146,6 +155,83 @@ fun VerifiedBadgeModeRow(
                 ) {
                     Text(mode.label, maxLines = 1)
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun ModSettingsFooter(
+    sessionStats: SessionFilterStats,
+    modifier: Modifier = Modifier
+) {
+    val statsSummary = when {
+        sessionStats.totalBlocked > 0 -> {
+            val parts = buildList {
+                if (sessionStats.adsBlocked > 0) {
+                    add("${sessionStats.adsBlocked} ${if (sessionStats.adsBlocked == 1) "ad" else "ads"}")
+                }
+                if (sessionStats.clutterBlocked > 0) {
+                    add("${sessionStats.clutterBlocked} filtered")
+                }
+            }
+            "v${BuildConfig.VERSION_NAME} • ${parts.joinToString(" • ")} this session"
+        }
+        else -> "v${BuildConfig.VERSION_NAME} • GraphQL ad & clutter shield active"
+    }
+    Text(
+        text = statsSummary,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, bottom = 12.dp)
+    )
+}
+
+@Composable
+fun OfflineErrorOverlay(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_twitter_bird),
+                contentDescription = null,
+                tint = TwitterBlue,
+                modifier = Modifier.size(56.dp)
+            )
+            Spacer(modifier = Modifier.height(18.dp))
+            Text(
+                text = "Couldn't load Twitter",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            FilledTonalButton(onClick = onRetry) {
+                Icon(AppIcons.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.size(8.dp))
+                Text("Try Again")
             }
         }
     }

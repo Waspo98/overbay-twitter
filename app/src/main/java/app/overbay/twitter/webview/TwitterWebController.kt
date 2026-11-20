@@ -1,19 +1,22 @@
 package app.overbay.twitter.webview
 
+import android.view.HapticFeedbackConstants
 import android.webkit.WebChromeClient
 import android.webkit.WebView
-import androidx.core.graphics.ColorUtils
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
 
 /**
  * Controller exposed to [app.overbay.twitter.ui.TwitterAppScreen] for navigation, reload,
- * dynamic theme sync, pull-to-refresh gating, and cache clearing.
+ * dynamic theme sync, pull-to-refresh gating, haptic feedback, and cache clearing.
  */
 class TwitterWebController {
     internal var webView: WebView? = null
     internal var swipeRefresh: SwipeRefreshLayout? = null
     internal var customViewCallback: WebChromeClient.CustomViewCallback? = null
     internal var onForceClearCustomView: (() -> Unit)? = null
+    var lastKnownUrl: String = DEFAULT_HOME_URL
+        internal set
     private var pullBlockedByPath = false
     private var pullBlockedByModal = false
 
@@ -26,6 +29,7 @@ class TwitterWebController {
     }
 
     fun loadUrl(url: String) {
+        lastKnownUrl = url
         webView?.loadUrl(url)
     }
 
@@ -34,11 +38,19 @@ class TwitterWebController {
         webView?.reload()
     }
 
+    fun performLongPressHaptic() {
+        webView?.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    }
+
     internal fun applyThemeColor(colorInt: Int) {
         webView?.setBackgroundColor(colorInt)
-        val isLight = ColorUtils.calculateLuminance(colorInt) > 0.5
+        val surfaceTheme = TwitterSurfaceTheme.fromColorInt(colorInt)
         swipeRefresh?.setProgressBackgroundColorSchemeColor(
-            if (isLight) 0xFFF7F9F9.toInt() else 0xFF192734.toInt()
+            when (surfaceTheme) {
+                TwitterSurfaceTheme.LIGHT -> 0xFFF7F9F9.toInt()
+                TwitterSurfaceTheme.DIM -> 0xFF192734.toInt()
+                TwitterSurfaceTheme.LIGHTS_OUT -> 0xFF16181C.toInt()
+            }
         )
     }
 
@@ -55,6 +67,10 @@ class TwitterWebController {
             runCatching { cb.onCustomViewHidden() }
         }
         onForceClearCustomView?.invoke()
+    }
+
+    companion object {
+        const val DEFAULT_HOME_URL = "https://x.com/home"
     }
 }
 

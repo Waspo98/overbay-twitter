@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import app.overbay.twitter.model.TwitterConfigRepository
 import app.overbay.twitter.ui.TwitterAppScreen
+import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
 import app.overbay.twitter.webview.TwitterRequestBlocker
 
 /**
@@ -46,13 +47,21 @@ class MainActivity : ComponentActivity() {
         }
 
         super.onCreate(savedInstanceState)
+        val repository = TwitterConfigRepository.getInstance(this)
+        val persistedLight = repository.lastThemeColor.value?.let {
+            TwitterSurfaceTheme.fromColorInt(it).isLight
+        } ?: false
+        val initialBarStyle = if (persistedLight) {
+            SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        } else {
+            SystemBarStyle.dark(Color.TRANSPARENT)
+        }
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+            statusBarStyle = initialBarStyle,
+            navigationBarStyle = initialBarStyle
         )
 
         handleIncomingIntent(intent)
-        val repository = TwitterConfigRepository.getInstance(this)
 
         setContent {
             TwitterAppScreen(

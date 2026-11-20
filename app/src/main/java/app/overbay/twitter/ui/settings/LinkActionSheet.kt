@@ -41,6 +41,7 @@ import app.overbay.twitter.webview.TwitterRequestBlocker
 fun LinkActionSheet(
     url: String,
     useCustomTab: Boolean,
+    toolbarColor: Int,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -99,7 +100,12 @@ fun LinkActionSheet(
                 },
                 modifier = Modifier.clickable {
                     onDismiss()
-                    TwitterRequestBlocker.openExternalUrl(context, cleanUrl, useCustomTab = useCustomTab)
+                    TwitterRequestBlocker.openExternalUrl(
+                        context = context,
+                        rawUrl = cleanUrl,
+                        useCustomTab = useCustomTab,
+                        toolbarColor = toolbarColor
+                    )
                 }
             )
 
@@ -116,7 +122,8 @@ fun LinkActionSheet(
                         context = context,
                         rawUrl = cleanUrl,
                         useCustomTab = useCustomTab,
-                        openInArchiveToday = true
+                        openInArchiveToday = true,
+                        toolbarColor = toolbarColor
                     )
                 }
             )

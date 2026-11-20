@@ -183,22 +183,67 @@ object TwitterRequestBlocker {
         }
     }
 
-    fun emptyJsonResponse(): WebResourceResponse {
-        return WebResourceResponse(
-            "application/json",
-            "UTF-8",
-            204,
-            "No Content",
-            mapOf("Access-Control-Allow-Origin" to "*"),
-            ByteArrayInputStream(EMPTY_BYTES)
-        )
+    fun isAllowedOriginUrl(origin: String?): Boolean {
+        if (origin.isNullOrBlank() || !origin.startsWith("https://", ignoreCase = true)) return false
+        val hostStart = 8
+        var hostEnd = origin.length
+        for (i in hostStart until origin.length) {
+            val ch = origin[i]
+            if (ch == '/' || ch == ':' || ch == '?' || ch == '#') {
+                hostEnd = i
+                break
+            }
+        }
+        if (hostEnd <= hostStart) return false
+        return internalHosts.any { regionMatchesDomain(origin, hostStart, hostEnd, it) } &&
+            blockedHosts.none { regionMatchesDomain(origin, hostStart, hostEnd, it) }
+    }
+
+    fun isJsonTelemetryUrl(urlString: String): Boolean {
+        return urlString.contains("/jot/", ignoreCase = true) ||
+            urlString.contains("/ClientEvent", ignoreCase = true)
+    }
+
+    fun emptyJsonResponse(
+        origin: String? = null,
+        isJsonEndpoint: Boolean = true
+    ): WebResourceResponse {
+        val headers = if (isAllowedOriginUrl(origin)) {
+            mapOf(
+                "Access-Control-Allow-Origin" to origin!!,
+                "Access-Control-Allow-Credentials" to "true",
+                "Vary" to "Origin"
+            )
+        } else {
+            mapOf("Access-Control-Allow-Origin" to "*")
+        }
+        return if (isJsonEndpoint) {
+            WebResourceResponse(
+                "application/json",
+                "UTF-8",
+                200,
+                "OK",
+                headers,
+                ByteArrayInputStream(EMPTY_JSON_BYTES)
+            )
+        } else {
+            WebResourceResponse(
+                "text/plain",
+                "UTF-8",
+                204,
+                "No Content",
+                headers,
+                ByteArrayInputStream(EMPTY_BYTES)
+            )
+        }
     }
 
     fun openExternalUrl(
         context: Context,
         rawUrl: String,
         useCustomTab: Boolean,
-        openInArchiveToday: Boolean = false
+        openInArchiveToday: Boolean = false,
+        toolbarColor: Int = 0xFF15202B.toInt()
     ) {
         val cleaned = cleanTrackingUrl(rawUrl)
         val target = if (openInArchiveToday) {
@@ -210,10 +255,18 @@ object TwitterRequestBlocker {
 
         if (useCustomTab) {
             val launched = runCatching {
+                val r = (toolbarColor shr 16) and 0xFF
+                val g = (toolbarColor shr 8) and 0xFF
+                val b = toolbarColor and 0xFF
+                val isLight = (0.2126 * r + 0.7152 * g + 0.0722 * b) > 128.0
                 val colorParams = CustomTabColorSchemeParams.Builder()
-                    .setToolbarColor(0xFF15202B.toInt())
+                    .setToolbarColor(toolbarColor)
+                    .setNavigationBarColor(toolbarColor)
                     .build()
                 CustomTabsIntent.Builder()
+                    .setColorScheme(
+                        if (isLight) CustomTabsIntent.COLOR_SCHEME_LIGHT else CustomTabsIntent.COLOR_SCHEME_DARK
+                    )
                     .setDefaultColorSchemeParams(colorParams)
                     .setShowTitle(true)
                     .build()
@@ -233,4 +286,5 @@ object TwitterRequestBlocker {
     }
 
     private val EMPTY_BYTES = ByteArray(0)
+    private val EMPTY_JSON_BYTES = "{}".toByteArray(Charsets.UTF_8)
 }

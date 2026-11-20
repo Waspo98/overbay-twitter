@@ -10,7 +10,32 @@ import androidx.compose.ui.graphics.Color
 val TwitterBlue = Color(0xFF1DA1F2)
 val TwitterBlueDark = Color(0xFF1A8CD8)
 
-private val DarkColors = darkColorScheme(
+/**
+ * Mirrors X's three built-in visual surfaces: Default (Light), Dim (#15202B), and Lights Out (#000000).
+ */
+enum class TwitterSurfaceTheme {
+    LIGHT,
+    DIM,
+    LIGHTS_OUT;
+
+    val isLight: Boolean get() = this == LIGHT
+
+    companion object {
+        fun fromColorInt(colorInt: Int): TwitterSurfaceTheme {
+            val r = (colorInt shr 16) and 0xFF
+            val g = (colorInt shr 8) and 0xFF
+            val b = colorInt and 0xFF
+            val luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            return when {
+                luma > 128.0 -> LIGHT
+                b - r >= 12 -> DIM
+                else -> LIGHTS_OUT
+            }
+        }
+    }
+}
+
+private val LightsOutColors = darkColorScheme(
     primary = TwitterBlue,
     onPrimary = Color.White,
     primaryContainer = Color(0xFF0E3A5D),
@@ -23,11 +48,31 @@ private val DarkColors = darkColorScheme(
     onSurface = Color(0xFFE7E9EA),
     surfaceVariant = Color(0xFF16181C),
     onSurfaceVariant = Color(0xFF8B98A5),
-    surfaceContainerLow = Color(0xFF15202B),
-    surfaceContainer = Color(0xFF192734),
-    surfaceContainerHigh = Color(0xFF22303C),
+    surfaceContainerLow = Color(0xFF16181C),
+    surfaceContainer = Color(0xFF1D1F23),
+    surfaceContainerHigh = Color(0xFF272A30),
     outline = Color(0xFF38444D),
     outlineVariant = Color(0xFF2F3336)
+)
+
+private val DimColors = darkColorScheme(
+    primary = TwitterBlue,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF124168),
+    onPrimaryContainer = Color(0xFFD6EEFF),
+    secondary = Color(0xFF8ECDF8),
+    onSecondary = Color(0xFF00344F),
+    background = Color(0xFF15202B),
+    onBackground = Color(0xFFF7F9F9),
+    surface = Color(0xFF15202B),
+    onSurface = Color(0xFFF7F9F9),
+    surfaceVariant = Color(0xFF1E2732),
+    onSurfaceVariant = Color(0xFF8B98A5),
+    surfaceContainerLow = Color(0xFF192734),
+    surfaceContainer = Color(0xFF1E2D3D),
+    surfaceContainerHigh = Color(0xFF253545),
+    outline = Color(0xFF38444D),
+    outlineVariant = Color(0xFF38444D)
 )
 
 private val LightColors = lightColorScheme(
@@ -52,11 +97,16 @@ private val LightColors = lightColorScheme(
 
 @Composable
 fun TwitterTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    surfaceTheme: TwitterSurfaceTheme = if (isSystemInDarkTheme()) TwitterSurfaceTheme.LIGHTS_OUT else TwitterSurfaceTheme.LIGHT,
     content: @Composable () -> Unit
 ) {
+    val scheme = when (surfaceTheme) {
+        TwitterSurfaceTheme.LIGHT -> LightColors
+        TwitterSurfaceTheme.DIM -> DimColors
+        TwitterSurfaceTheme.LIGHTS_OUT -> LightsOutColors
+    }
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
+        colorScheme = scheme,
         content = content
     )
 }

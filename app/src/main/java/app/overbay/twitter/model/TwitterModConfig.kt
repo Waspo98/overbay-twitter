@@ -1,7 +1,19 @@
 package app.overbay.twitter.model
 
+import androidx.compose.runtime.Immutable
 import java.util.regex.PatternSyntaxException
 import kotlinx.serialization.Serializable
+
+/**
+ * Live session filter counters reported by the GraphQL interception layer.
+ */
+@Immutable
+data class SessionFilterStats(
+    val adsBlocked: Int = 0,
+    val clutterBlocked: Int = 0
+) {
+    val totalBlocked: Int get() = adsBlocked + clutterBlocked
+}
 
 /**
  * Controls how verification checkmarks render across timelines, profiles, and replies.
@@ -26,6 +38,7 @@ enum class HomeFeedKind(val label: String) {
 /**
  * A home header feed tab discovered from `/home` or baseline defaults.
  */
+@Immutable
 @Serializable
 data class DetectedHomeFeed(
     val name: String,
@@ -70,6 +83,7 @@ data class DetectedHomeFeed(
 /**
  * Persistent configuration for all Twitter WebView interception, branding, and UI mod layers.
  */
+@Immutable
 @Serializable
 data class TwitterModConfig(
     // 1. Branding & Identity
