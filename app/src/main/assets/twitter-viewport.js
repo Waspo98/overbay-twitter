@@ -4,6 +4,99 @@
 
     const INPUT_EVENTS = ["pointerdown", "touchstart", "wheel"];
     const DEFAULT_VIEWPORT_META = "width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0,viewport-fit=cover";
+    let activeNavInsetDp = Math.max(0, Math.round(Number(window.__TWITTER_NAV_INSET_BOTTOM__) || 0));
+
+    function isOpaqueSurfaceColor(bg) {
+        const m = bg && bg.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$/i);
+        if (!m) return false;
+        const r = +m[1], g = +m[2], b = +m[3], a = m[4] === undefined ? 1 : parseFloat(m[4]);
+        return a >= 0.9 && ((r === 255 && g === 255 && b === 255) || (r === 0 && g === 0 && b === 0) || (r === 21 && g === 32 && b === 43));
+    }
+
+    function findFixedHost(el, maxHops, maxBottomGap = 8, maxHeightPx = 160) {
+        let cur = el, fixedHost = null;
+        const vh = window.innerHeight || 0;
+        for (let i = 0; i < maxHops && cur && cur !== document.body && cur !== document.documentElement; i++) {
+            if (cur.tagName === "MAIN" || cur.id === "react-root") break;
+            if (getComputedStyle(cur).position === "fixed") {
+                const r = cur.getBoundingClientRect();
+                if (r.height > 0 && r.height <= maxHeightPx && (vh <= 0 || Math.abs(vh - r.bottom) <= maxBottomGap)) {
+                    fixedHost = cur;
+                }
+            }
+            cur = cur.parentElement;
+        }
+        return fixedHost;
+    }
+
+    function syncNavInsets() {
+        const root = document.documentElement;
+        if (!root) return;
+        const inset = activeNavInsetDp;
+        const targetPx = `${inset}px`;
+        if (root.style.getPropertyValue("--tw-nav-inset-bottom") !== targetPx) {
+            root.style.setProperty("--tw-nav-inset-bottom", targetPx);
+        }
+        const flag = inset > 0 ? "true" : "false";
+        if (root.dataset.twNavInset !== flag) root.dataset.twNavInset = flag;
+        if (inset <= 0) return;
+
+        const vh = window.innerHeight || 0;
+        const bottomBar = document.querySelector('[data-testid="BottomBar"]');
+        let bottomBarHeight = 0;
+        if (bottomBar) {
+            const host = findFixedHost(bottomBar, 4, 8, 150) || (getComputedStyle(bottomBar).position === "fixed" ? bottomBar : null);
+            if (host) {
+                if (host.getAttribute("data-tw-bottom-bar-host") !== "true") host.setAttribute("data-tw-bottom-bar-host", "true");
+                if (bottomBar.getAttribute("data-tw-bottom-bar") !== "true") bottomBar.setAttribute("data-tw-bottom-bar", "true");
+                const navEl = bottomBar.querySelector("nav") || bottomBar.firstElementChild;
+                for (let cur = navEl || bottomBar; cur && cur !== host; cur = cur.parentElement) {
+                    if (cur === bottomBar || isOpaqueSurfaceColor(getComputedStyle(cur).backgroundColor)) {
+                        if (cur.getAttribute("data-tw-bottom-bar-clear") !== "true") cur.setAttribute("data-tw-bottom-bar-clear", "true");
+                    }
+                }
+                bottomBarHeight = host.getBoundingClientRect().height || 0;
+            }
+        }
+
+        const fab = document.querySelector('[data-testid="FloatingActionButtons_Tweet_Button"]');
+        if (fab && vh > 0) {
+            const fabHost = findFixedHost(fab, 4, 180, 120);
+            if (fabHost) {
+                if (!fabHost.dataset.twOrigBottomGap) {
+                    fabHost.dataset.twOrigBottomGap = String(Math.max(0, Math.round(vh - fabHost.getBoundingClientRect().bottom)));
+                }
+                const origGap = Number(fabHost.dataset.twOrigBottomGap) || 0;
+                const threshold = (bottomBarHeight > 0 ? 60 : 16) + inset;
+                if (origGap < threshold && fabHost.getAttribute("data-tw-fab-offset") !== "true") {
+                    fabHost.setAttribute("data-tw-fab-offset", "true");
+                }
+            }
+        }
+
+        for (const el of document.querySelectorAll('[data-testid="inline_reply_offscreen"], [data-testid="dmComposerTextInput"], [data-testid="toolBar"]')) {
+            const host = findFixedHost(el, 5, 6, 220);
+            if (host && host.getAttribute("data-tw-bottom-bar-host") !== "true" && host.getAttribute("data-tw-fixed-bottom-pad") !== "true") {
+                host.setAttribute("data-tw-fixed-bottom-pad", "true");
+            }
+        }
+
+        const toast = document.querySelector('[data-testid="toast"]');
+        if (toast && vh > 0) {
+            const toastHost = findFixedHost(toast, 3, 120, 140);
+            if (toastHost && !toastHost.dataset.twOrigBottomGap) {
+                const gap = Math.max(0, Math.round(vh - toastHost.getBoundingClientRect().bottom));
+                toastHost.dataset.twOrigBottomGap = String(gap);
+                if (gap < inset + 76) toastHost.setAttribute("data-tw-fab-offset", "true");
+            }
+        }
+    }
+
+    window.__twSetNavInsetBottom = function (dp) {
+        activeNavInsetDp = Math.max(0, Math.round(Number(dp) || 0));
+        window.__TWITTER_NAV_INSET_BOTTOM__ = activeNavInsetDp;
+        syncNavInsets();
+    };
 
     function getActiveHomeTabName() {
         if (!location.pathname.startsWith("/home")) return null;
@@ -179,5 +272,6 @@
         }
     }
 
-    window.__TW_VIEWPORT__ = { tryApplyPendingScrollRestore };
+    syncNavInsets();
+    window.__TW_VIEWPORT__ = { tryApplyPendingScrollRestore, syncNavInsets };
 })();

@@ -201,3 +201,51 @@ html[data-tw-surface-override="black"][style*="#15202b" i],
 html[data-tw-surface-override="black"] [style*="background-color: rgb(21, 32, 43)"],
 html[data-tw-surface-override="black"] [style*="background-color:rgb(21,32,43)"],
 html[data-tw-surface-override="black"] [style*="background-color: #15202b" i] { background-color: #000000 !important; }
+
+/* Edge-to-Edge Transparent System Navigation Bar Support */
+html[data-tw-nav-inset="true"] [data-tw-bottom-bar-host="true"] {
+    bottom: 0px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding-bottom: var(--tw-nav-inset-bottom, 0px) !important;
+    box-sizing: border-box !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    backdrop-filter: blur(12px) !important;
+}
+html[data-tw-nav-inset="true"][data-tw-surface-theme="light"] [data-tw-bottom-bar-host="true"] {
+    background-color: rgba(255, 255, 255, 0.85) !important;
+}
+html[data-tw-nav-inset="true"][data-tw-surface-theme="dim"] [data-tw-bottom-bar-host="true"] {
+    background-color: rgba(21, 32, 43, 0.80) !important;
+}
+html[data-tw-nav-inset="true"][data-tw-surface-theme="black"] [data-tw-bottom-bar-host="true"] {
+    background-color: rgba(0, 0, 0, 0.78) !important;
+}
+html[data-tw-nav-inset="true"] [data-tw-bottom-bar-clear="true"] {
+    background-color: transparent !important;
+}
+html[data-tw-nav-inset="true"] [data-tw-fixed-bottom-pad="true"] {
+    bottom: 0px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding-bottom: var(--tw-nav-inset-bottom, 0px) !important;
+    box-sizing: border-box !important;
+}
+html[data-tw-nav-inset="true"] [data-tw-fab-offset="true"] {
+    margin-bottom: var(--tw-nav-inset-bottom, 0px) !important;
+}
+html[data-tw-nav-inset="true"] [data-testid="sheetDialog"] {
+    padding-bottom: var(--tw-nav-inset-bottom, 0px) !important;
+    box-sizing: border-box !important;
+}
+html[data-tw-nav-inset="true"] [data-testid="primaryColumn"],
+html[data-tw-nav-inset="true"] main[role="main"]:not(:has([data-testid="primaryColumn"])) {
+    padding-bottom: var(--tw-nav-inset-bottom, 0px) !important;
+    box-sizing: border-box !important;
+}
+html[data-tw-nav-inset="true"] header[role="banner"]:has(nav[aria-label="Primary"]) [data-testid="SideNav_AccountSwitcher_Button"] {
+    margin-bottom: var(--tw-nav-inset-bottom, 0px) !important;
+}
+html[data-tw-nav-inset="true"] .tw-mod-img-dl-btn {
+    bottom: calc(76px + var(--tw-nav-inset-bottom, 0px));
+}

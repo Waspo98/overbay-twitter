@@ -86,6 +86,8 @@
             });
             themeDirty = true;
         }
+        const surfaceFallback = !wantDark ? "light" : (wantDim ? "dim" : "black");
+        if (!root.dataset.twSurfaceTheme) root.dataset.twSurfaceTheme = surfaceFallback;
         if (surfaceOverride) {
             window.__TW_THEME__?.syncSurfaceStyleSheet?.(surfaceOverride, forceSurfaceSync || sigChanged);
         }
@@ -101,6 +103,12 @@
             }
             if (hex) {
                 themeDirty = false;
+                const hm = /^#([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})$/i.exec(hex);
+                if (hm) {
+                    const r = parseInt(hm[1], 16), g = parseInt(hm[2], 16), b = parseInt(hm[3], 16);
+                    const surf = (0.2126 * r + 0.7152 * g + 0.0722 * b) > 128 ? "light" : (b - r >= 12 ? "dim" : "black");
+                    if (root.dataset.twSurfaceTheme !== surf) root.dataset.twSurfaceTheme = surf;
+                }
                 if (hex !== lastReportedThemeHex) {
                     lastReportedThemeHex = hex;
                     headerDirty = true;
@@ -344,8 +352,9 @@
             bindHeaderLongPress();
             injectDrawerModSettingsEntry();
         }
-        if (checkHeader || checkDialog) {
+        if (checkHeader || checkDialog || fullScan) {
             window.__TW_THEME__?.syncDrawerThemeBars?.(cfg);
+            window.__TW_VIEWPORT__?.syncNavInsets?.();
         }
         if (window.__TW_FEATURES__.handleHomeTabs(cfg, checkTabs)) tabsDirty = false;
         window.__TW_FEATURES__.enhanceTweetsAndProfiles(cfg, roots, fullScan);

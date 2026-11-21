@@ -2,12 +2,21 @@ package app.overbay.twitter.ui
 
 import android.content.Context
 import android.content.ContextWrapper
+import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.union
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
@@ -19,6 +28,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -27,6 +37,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
+import kotlin.math.ceil
 
 internal tailrec fun Context.findComponentActivity(): ComponentActivity? = when (this) {
     is ComponentActivity -> this
@@ -69,6 +80,9 @@ internal fun SyncSystemBarsEffect(
         val window = activity?.window
         if (window != null) {
             WindowCompat.setDecorFitsSystemWindows(window, false)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                window.isNavigationBarContrastEnforced = false
+            }
             val insetsController = WindowCompat.getInsetsController(window, view)
             insetsController.isAppearanceLightStatusBars = lightBars
             insetsController.isAppearanceLightNavigationBars = lightBars
@@ -82,6 +96,38 @@ internal fun SyncSystemBarsEffect(
         }
         onDispose { }
     }
+}
+
+internal fun computeUncoveredNavBottomDp(
+    navBottomPx: Int,
+    imeBottomPx: Int,
+    cutoutBottomPx: Int,
+    density: Float,
+    isFullscreenVideo: Boolean
+): Int {
+    if (isFullscreenVideo || density <= 0f) return 0
+    val coveredPx = maxOf(imeBottomPx, cutoutBottomPx).coerceAtLeast(0)
+    val uncoveredPx = (navBottomPx - coveredPx).coerceAtLeast(0)
+    return if (uncoveredPx == 0) 0 else ceil(uncoveredPx / density).toInt()
+}
+
+@Composable
+internal fun rememberWebViewEdgeToEdgeState(isFullscreenVideo: Boolean): Pair<WindowInsets, Int> {
+    val density = LocalDensity.current
+    val safeTopAndHorizontal = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+    val imeInsets = WindowInsets.ime
+    val bottomCutout = WindowInsets.displayCutout.only(WindowInsetsSides.Bottom)
+    val webViewInsets = remember(safeTopAndHorizontal, imeInsets, bottomCutout) {
+        safeTopAndHorizontal.union(imeInsets).union(bottomCutout)
+    }
+    val navBottomDp = computeUncoveredNavBottomDp(
+        navBottomPx = WindowInsets.navigationBars.getBottom(density),
+        imeBottomPx = imeInsets.getBottom(density),
+        cutoutBottomPx = bottomCutout.getBottom(density),
+        density = density.density,
+        isFullscreenVideo = isFullscreenVideo
+    )
+    return webViewInsets to navBottomDp
 }
 
 @Composable

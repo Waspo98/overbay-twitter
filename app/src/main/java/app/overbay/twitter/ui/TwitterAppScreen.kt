@@ -129,6 +129,7 @@ fun TwitterAppScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val (webViewInsets, navInsetBottomDp) = rememberWebViewEdgeToEdgeState(isFullscreenVideo = customVideoView != null)
     val initialUrl = remember(webViewEpoch) {
         if (webViewEpoch == 0) deepLinkUrl ?: TwitterWebController.DEFAULT_HOME_URL
         else controller.lastKnownUrl
@@ -288,6 +289,7 @@ fun TwitterAppScreen(
                     configJson = configJson,
                     preferDesktopUserAgent = preferDesktopUserAgent,
                     isSystemDark = systemDark,
+                    navInsetBottomDp = navInsetBottomDp,
                     controller = controller,
                     onOpenSettings = { showSettingsSheet = true },
                     onShowLinkActions = { url -> longPressedLinkUrl = url },
@@ -320,7 +322,7 @@ fun TwitterAppScreen(
                     onWebViewAttached = { isWebViewAttached = true },
                     modifier = Modifier
                         .fillMaxSize()
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .windowInsetsPadding(webViewInsets)
                 )
             }
 
@@ -330,7 +332,7 @@ fun TwitterAppScreen(
                     onRetry = { triggerReload() },
                     modifier = Modifier
                         .fillMaxSize()
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .windowInsetsPadding(webViewInsets)
                 )
             }
 

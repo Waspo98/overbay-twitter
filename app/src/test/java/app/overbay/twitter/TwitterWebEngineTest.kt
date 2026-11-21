@@ -7,6 +7,7 @@ import app.overbay.twitter.model.TwitterConfigRepository
 import app.overbay.twitter.model.TwitterDarkVariant
 import app.overbay.twitter.model.TwitterModConfig
 import app.overbay.twitter.model.TwitterThemeMode
+import app.overbay.twitter.ui.computeUncoveredNavBottomDp
 import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
 import app.overbay.twitter.ui.theme.resolveInitialColorInt
 import app.overbay.twitter.webview.DisplayLayoutState
@@ -316,6 +317,9 @@ class TwitterWebEngineTest {
 
         // Viewport & location-restore engine contracts
         assertTrue(viewport.contains("window.__TW_VIEWPORT__"))
+        assertTrue(viewport.contains("__twSetNavInsetBottom"))
+        assertTrue(viewport.contains("syncNavInsets"))
+        assertTrue(viewport.contains("--tw-nav-inset-bottom"))
         assertTrue(viewport.contains("__twCaptureLocation"))
         assertTrue(viewport.contains("__twCancelReflow"))
         assertTrue(viewport.contains("__twReflowViewport"))
@@ -329,6 +333,8 @@ class TwitterWebEngineTest {
         assertTrue(dom.contains("checkedLogoSvgs = new WeakSet()"))
         assertTrue(dom.contains("tw-mod-preconnect"))
         assertTrue(dom.contains("twSurfaceOverride"))
+        assertTrue(dom.contains("twSurfaceTheme"))
+        assertTrue(dom.contains("syncNavInsets"))
         assertFalse(dom.contains("twLogoChecked"))
         assertFalse(dom.contains("openSettingsWithHaptic?.() ??"))
         assertFalse(dom.contains("__TWITTER_IS_UNFOLDED__"))
@@ -340,7 +346,23 @@ class TwitterWebEngineTest {
         assertTrue(css.contains(".tw-mod-theme-bar"))
         assertTrue(css.contains(".tw-mod-dark-subrow"))
         assertTrue(css.contains("[role=\"group\"] > div:has(> a[href*=\"/analytics\"])"))
+        assertTrue(css.contains("data-tw-nav-inset=\"true\""))
+        assertTrue(css.contains("data-tw-bottom-bar-host=\"true\""))
+        assertTrue(css.contains("--tw-nav-inset-bottom"))
         assertFalse(css.contains("data-tw-force-bottom-nav"))
+    }
+
+    @Test
+    fun uncoveredNavBottomDpRespectsImeCutoutsDensityAndFullscreenVideo() {
+        assertEquals(24, computeUncoveredNavBottomDp(navBottomPx = 72, imeBottomPx = 0, cutoutBottomPx = 0, density = 3.0f, isFullscreenVideo = false))
+        assertEquals(48, computeUncoveredNavBottomDp(navBottomPx = 144, imeBottomPx = 0, cutoutBottomPx = 0, density = 3.0f, isFullscreenVideo = false))
+        assertEquals(24, computeUncoveredNavBottomDp(navBottomPx = 64, imeBottomPx = 0, cutoutBottomPx = 0, density = 2.75f, isFullscreenVideo = false))
+        assertEquals(0, computeUncoveredNavBottomDp(navBottomPx = 72, imeBottomPx = 900, cutoutBottomPx = 0, density = 3.0f, isFullscreenVideo = false))
+        assertEquals(14, computeUncoveredNavBottomDp(navBottomPx = 72, imeBottomPx = 30, cutoutBottomPx = 0, density = 3.0f, isFullscreenVideo = false))
+        assertEquals(0, computeUncoveredNavBottomDp(navBottomPx = 72, imeBottomPx = 0, cutoutBottomPx = 80, density = 3.0f, isFullscreenVideo = false))
+        assertEquals(0, computeUncoveredNavBottomDp(navBottomPx = 72, imeBottomPx = 0, cutoutBottomPx = 0, density = 3.0f, isFullscreenVideo = true))
+        assertEquals(0, computeUncoveredNavBottomDp(navBottomPx = 0, imeBottomPx = 0, cutoutBottomPx = 0, density = 3.0f, isFullscreenVideo = false))
+        assertEquals(0, computeUncoveredNavBottomDp(navBottomPx = 72, imeBottomPx = 0, cutoutBottomPx = 0, density = 0f, isFullscreenVideo = false))
     }
 
     private fun resolveAssetsDir(): File {

@@ -41,16 +41,20 @@ class TwitterAssetBundle private constructor(
     fun buildConfigSeedScript(
         configJson: String,
         isSystemDark: Boolean = false,
-        restoreStateJson: String? = null
+        restoreStateJson: String? = null,
+        navInsetBottomDp: Int = 0
     ): String {
         val extraLen = restoreStateJson?.length ?: 0
-        return buildString(configJson.length + extraLen + 240) {
+        val safeNavDp = navInsetBottomDp.coerceAtLeast(0)
+        return buildString(configJson.length + extraLen + 320) {
             if (!restoreStateJson.isNullOrBlank()) {
                 append("window.__TWITTER_RESTORE_STATE__ = ")
                 append(restoreStateJson)
                 append(";\n")
             }
-            append("window.__TWITTER_SYSTEM_DARK__ = ")
+            append("window.__TWITTER_NAV_INSET_BOTTOM__ = ")
+            append(safeNavDp)
+            append(";\nwindow.__TWITTER_SYSTEM_DARK__ = ")
             append(isSystemDark)
             append(";\nwindow.__TWITTER_CONFIG__ = ")
             append(configJson)
@@ -58,6 +62,12 @@ class TwitterAssetBundle private constructor(
             append(isSystemDark)
             append("); }\n")
         }
+    }
+
+    fun buildNavInsetScript(navInsetBottomDp: Int): String {
+        val safeNavDp = navInsetBottomDp.coerceAtLeast(0)
+        return "window.__TWITTER_NAV_INSET_BOTTOM__ = $safeNavDp;\n" +
+            "if (typeof window.__twSetNavInsetBottom === 'function') { window.__twSetNavInsetBottom($safeNavDp); }\n"
     }
 
     companion object {

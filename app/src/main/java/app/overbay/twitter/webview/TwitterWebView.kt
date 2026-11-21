@@ -53,6 +53,7 @@ fun TwitterWebView(
     configJson: String,
     preferDesktopUserAgent: Boolean,
     isSystemDark: Boolean,
+    navInsetBottomDp: Int = 0,
     controller: TwitterWebController,
     onOpenSettings: () -> Unit,
     onShowLinkActions: (String) -> Unit,
@@ -78,6 +79,7 @@ fun TwitterWebView(
     val configJsonRef = remember { AtomicReference(configJson) }
     val isSystemDarkRef = remember { AtomicReference(isSystemDark) }
     val themeColorRef = remember { AtomicInteger(initialThemeColorInt) }
+    val navInsetBottomRef = remember { AtomicInteger(navInsetBottomDp) }
 
     val latestOnOpenSettings by rememberUpdatedState(onOpenSettings)
     val latestOnShowLinkActions by rememberUpdatedState(onShowLinkActions)
@@ -109,25 +111,23 @@ fun TwitterWebView(
     }
 
     val configScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
+    val navInsetScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
     val coreScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
     val restoreScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
     val fallbackRestoreJsonRef = remember { AtomicReference<String?>(null) }
     val ownedWebViewRef = remember { AtomicReference<WebView?>(null) }
     val ownedSwipeRefreshRef = remember { AtomicReference<SwipeRefreshLayout?>(null) }
     val lastSeededStateRef = remember { AtomicReference<Pair<String, Boolean>?>(null) }
+    val lastNavInsetDpRef = remember { AtomicInteger(navInsetBottomDp) }
     var webViewAttached by remember { mutableStateOf(false) }
 
-    fun registerConfigStartScript(webView: WebView, json: String, systemDark: Boolean) {
+    fun registerStartScript(webView: WebView, ref: AtomicReference<ScriptHandler?>, script: String) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
-        configScriptHandlerRef.getAndSet(null)?.remove()
+        ref.getAndSet(null)?.remove()
         val handler = runCatching {
-            WebViewCompat.addDocumentStartJavaScript(
-                webView,
-                assetBundle.buildConfigSeedScript(json, systemDark),
-                ORIGIN_ALLOWLIST
-            )
+            WebViewCompat.addDocumentStartJavaScript(webView, script, ORIGIN_ALLOWLIST)
         }.getOrNull()
-        configScriptHandlerRef.set(handler)
+        ref.set(handler)
     }
 
     // Keep atomic refs fresh for background IO-thread callbacks without invoking JNI on every recompose.
@@ -136,6 +136,7 @@ fun TwitterWebView(
         configJsonRef.set(configJson)
         isSystemDarkRef.set(isSystemDark)
         themeColorRef.set(initialThemeColorInt)
+        navInsetBottomRef.set(navInsetBottomDp)
     }
 
     LaunchedEffect(webViewAttached) {
@@ -155,11 +156,18 @@ fun TwitterWebView(
         val wv = ownedWebViewRef.get() ?: return@LaunchedEffect
         val stateKey = configJson to isSystemDark
         if (lastSeededStateRef.getAndSet(stateKey) != stateKey) {
-            registerConfigStartScript(wv, configJson, isSystemDark)
-            wv.evaluateJavascript(
-                assetBundle.buildConfigSeedScript(configJson, isSystemDark),
-                null
-            )
+            val script = assetBundle.buildConfigSeedScript(configJson, isSystemDark, navInsetBottomDp = navInsetBottomRef.get())
+            registerStartScript(wv, configScriptHandlerRef, script)
+            wv.evaluateJavascript(script, null)
+        }
+    }
+
+    LaunchedEffect(webViewAttached, navInsetBottomDp) {
+        val wv = ownedWebViewRef.get() ?: return@LaunchedEffect
+        if (lastNavInsetDpRef.getAndSet(navInsetBottomDp) != navInsetBottomDp) {
+            val script = assetBundle.buildNavInsetScript(navInsetBottomDp)
+            registerStartScript(wv, navInsetScriptHandlerRef, script)
+            wv.evaluateJavascript(script, null)
         }
     }
 
@@ -180,14 +188,11 @@ fun TwitterWebView(
             CookieManager.getInstance().flush()
             pendingFileCallback?.onReceiveValue(null)
             pendingFileCallback = null
+            val handlers = listOf(configScriptHandlerRef, navInsetScriptHandlerRef, coreScriptHandlerRef, restoreScriptHandlerRef)
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                configScriptHandlerRef.getAndSet(null)?.remove()
-                coreScriptHandlerRef.getAndSet(null)?.remove()
-                restoreScriptHandlerRef.getAndSet(null)?.remove()
+                handlers.forEach { it.getAndSet(null)?.remove() }
             } else {
-                configScriptHandlerRef.set(null)
-                coreScriptHandlerRef.set(null)
-                restoreScriptHandlerRef.set(null)
+                handlers.forEach { it.set(null) }
             }
             fallbackRestoreJsonRef.set(null)
             val wv = ownedWebViewRef.getAndSet(null)
@@ -292,26 +297,15 @@ fun TwitterWebView(
                 if (docStartSupported) {
                     val initialJson = configJsonRef.get()
                     val initialDark = isSystemDarkRef.get()
+                    val initialNavDp = navInsetBottomRef.get()
                     lastSeededStateRef.set(initialJson to initialDark)
+                    lastNavInsetDpRef.set(initialNavDp)
                     if (!pendingRestoreJson.isNullOrBlank()) {
-                        val restoreHandler = runCatching {
-                            WebViewCompat.addDocumentStartJavaScript(
-                                this,
-                                "window.__TWITTER_RESTORE_STATE__ = $pendingRestoreJson;",
-                                ORIGIN_ALLOWLIST
-                            )
-                        }.getOrNull()
-                        restoreScriptHandlerRef.set(restoreHandler)
+                        registerStartScript(this, restoreScriptHandlerRef, "window.__TWITTER_RESTORE_STATE__ = $pendingRestoreJson;")
                     }
-                    registerConfigStartScript(this, initialJson, initialDark)
-                    val coreHandler = runCatching {
-                        WebViewCompat.addDocumentStartJavaScript(
-                            this,
-                            assetBundle.coreEngineScript,
-                            ORIGIN_ALLOWLIST
-                        )
-                    }.getOrNull()
-                    coreScriptHandlerRef.set(coreHandler)
+                    registerStartScript(this, configScriptHandlerRef, assetBundle.buildConfigSeedScript(initialJson, initialDark, navInsetBottomDp = initialNavDp))
+                    registerStartScript(this, navInsetScriptHandlerRef, assetBundle.buildNavInsetScript(initialNavDp))
+                    registerStartScript(this, coreScriptHandlerRef, assetBundle.coreEngineScript)
                 } else {
                     fallbackRestoreJsonRef.set(pendingRestoreJson)
                 }
@@ -325,6 +319,7 @@ fun TwitterWebView(
                     configJsonRef = configJsonRef,
                     isSystemDarkRef = isSystemDarkRef,
                     themeColorRef = themeColorRef,
+                    navInsetBottomRef = navInsetBottomRef,
                     consumeFallbackRestoreJson = { fallbackRestoreJsonRef.getAndSet(null) },
                     onClearOneShotRestoreScript = {
                         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
