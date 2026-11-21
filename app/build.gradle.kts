@@ -1,4 +1,7 @@
 import java.io.File
+import java.io.StringReader
+import java.util.Properties
+import org.gradle.api.GradleException
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -24,6 +27,37 @@ val isBeta = if (betaProp.isPresent) {
     gitBranch.equals("beta", ignoreCase = true)
 }
 
+val localProps = Properties().apply {
+    val text = providers.fileContents(rootProject.layout.projectDirectory.file("local.properties"))
+        .asText
+        .orNull
+    if (text != null) load(StringReader(text))
+}
+
+fun releaseSecret(envKey: String, propKey: String): String? =
+    providers.environmentVariable(envKey).orNull?.takeIf { it.isNotBlank() }
+        ?: localProps.getProperty(propKey)?.takeIf { it.isNotBlank() }
+
+val releaseKeystorePath = releaseSecret("KEYSTORE_PATH", "release.keystore.path")
+val releaseKeystorePassword = releaseSecret("KEYSTORE_PASSWORD", "release.keystore.password")
+val releaseKeyAlias = releaseSecret("KEY_ALIAS", "release.key.alias")
+val releaseKeyPassword = releaseSecret("KEY_PASSWORD", "release.key.password")
+val releaseKeystoreFile = releaseKeystorePath?.let { path ->
+    val f = File(path)
+    if (f.isAbsolute) f else rootProject.file(path)
+}
+val hasReleaseSigning = releaseKeystoreFile?.isFile == true &&
+    !releaseKeystorePassword.isNullOrBlank() &&
+    !releaseKeyAlias.isNullOrBlank() &&
+    !releaseKeyPassword.isNullOrBlank()
+
+if (gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) } && !hasReleaseSigning) {
+    throw GradleException(
+        "Release signing is not configured. Provide KEYSTORE_PATH/KEYSTORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD " +
+            "or release.keystore.* in local.properties before running release tasks."
+    )
+}
+
 android {
     namespace = "app.overbay.twitter"
     compileSdk = 36
@@ -32,8 +66,8 @@ android {
         applicationId = if (isBeta) "app.overbay.twitter.beta" else "app.overbay.twitter"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = if (isBeta) "0.1.0-beta" else "0.1.0"
+        versionCode = 2
+        versionName = if (isBeta) "1.0.0-beta" else "1.0.0"
     }
 
     sourceSets {
@@ -49,6 +83,17 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseKeystoreFile
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -57,7 +102,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
