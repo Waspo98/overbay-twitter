@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -115,18 +116,24 @@ internal fun computeUncoveredNavBottomDp(
 internal fun rememberWebViewEdgeToEdgeState(isFullscreenVideo: Boolean): Pair<WindowInsets, Int> {
     val density = LocalDensity.current
     val safeTopAndHorizontal = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+    val navInsets = WindowInsets.navigationBars
     val imeInsets = WindowInsets.ime
     val bottomCutout = WindowInsets.displayCutout.only(WindowInsetsSides.Bottom)
     val webViewInsets = remember(safeTopAndHorizontal, imeInsets, bottomCutout) {
         safeTopAndHorizontal.union(imeInsets).union(bottomCutout)
     }
-    val navBottomDp = computeUncoveredNavBottomDp(
-        navBottomPx = WindowInsets.navigationBars.getBottom(density),
-        imeBottomPx = imeInsets.getBottom(density),
-        cutoutBottomPx = bottomCutout.getBottom(density),
-        density = density.density,
-        isFullscreenVideo = isFullscreenVideo
-    )
+    val latestFullscreen by rememberUpdatedState(isFullscreenVideo)
+    val navBottomDp by remember(density, navInsets, imeInsets, bottomCutout) {
+        derivedStateOf {
+            computeUncoveredNavBottomDp(
+                navBottomPx = navInsets.getBottom(density),
+                imeBottomPx = imeInsets.getBottom(density),
+                cutoutBottomPx = bottomCutout.getBottom(density),
+                density = density.density,
+                isFullscreenVideo = latestFullscreen
+            )
+        }
+    }
     return webViewInsets to navBottomDp
 }
 

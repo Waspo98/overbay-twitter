@@ -29,6 +29,19 @@
         return fixedHost;
     }
 
+    function syncBottomOffsetHost(host, vh, threshold) {
+        if (!host) return;
+        if (!host.dataset.twOrigBottomGap) {
+            host.dataset.twOrigBottomGap = String(Math.max(0, Math.round(vh - host.getBoundingClientRect().bottom)));
+        }
+        const origGap = Number(host.dataset.twOrigBottomGap) || 0;
+        if (origGap < threshold) {
+            if (host.getAttribute("data-tw-fab-offset") !== "true") host.setAttribute("data-tw-fab-offset", "true");
+        } else if (host.hasAttribute("data-tw-fab-offset")) {
+            host.removeAttribute("data-tw-fab-offset");
+        }
+    }
+
     function syncNavInsets() {
         const root = document.documentElement;
         if (!root) return;
@@ -48,7 +61,6 @@
             const host = findFixedHost(bottomBar, 4, 8, 150) || (getComputedStyle(bottomBar).position === "fixed" ? bottomBar : null);
             if (host) {
                 if (host.getAttribute("data-tw-bottom-bar-host") !== "true") host.setAttribute("data-tw-bottom-bar-host", "true");
-                if (bottomBar.getAttribute("data-tw-bottom-bar") !== "true") bottomBar.setAttribute("data-tw-bottom-bar", "true");
                 const navEl = bottomBar.querySelector("nav") || bottomBar.firstElementChild;
                 for (let cur = navEl || bottomBar; cur && cur !== host; cur = cur.parentElement) {
                     if (cur === bottomBar || isOpaqueSurfaceColor(getComputedStyle(cur).backgroundColor)) {
@@ -61,17 +73,8 @@
 
         const fab = document.querySelector('[data-testid="FloatingActionButtons_Tweet_Button"]');
         if (fab && vh > 0) {
-            const fabHost = findFixedHost(fab, 4, 180, 120);
-            if (fabHost) {
-                if (!fabHost.dataset.twOrigBottomGap) {
-                    fabHost.dataset.twOrigBottomGap = String(Math.max(0, Math.round(vh - fabHost.getBoundingClientRect().bottom)));
-                }
-                const origGap = Number(fabHost.dataset.twOrigBottomGap) || 0;
-                const threshold = (bottomBarHeight > 0 ? 60 : 16) + inset;
-                if (origGap < threshold && fabHost.getAttribute("data-tw-fab-offset") !== "true") {
-                    fabHost.setAttribute("data-tw-fab-offset", "true");
-                }
-            }
+            const fabThreshold = bottomBarHeight > 0 ? Math.max(68 + inset, Math.round(bottomBarHeight) + 16) : (16 + inset);
+            syncBottomOffsetHost(findFixedHost(fab, 4, 180, 120), vh, fabThreshold);
         }
 
         for (const el of document.querySelectorAll('[data-testid="inline_reply_offscreen"], [data-testid="dmComposerTextInput"], [data-testid="toolBar"]')) {
@@ -83,12 +86,8 @@
 
         const toast = document.querySelector('[data-testid="toast"]');
         if (toast && vh > 0) {
-            const toastHost = findFixedHost(toast, 3, 120, 140);
-            if (toastHost && !toastHost.dataset.twOrigBottomGap) {
-                const gap = Math.max(0, Math.round(vh - toastHost.getBoundingClientRect().bottom));
-                toastHost.dataset.twOrigBottomGap = String(gap);
-                if (gap < inset + 76) toastHost.setAttribute("data-tw-fab-offset", "true");
-            }
+            const toastThreshold = Math.max(inset + 76, bottomBarHeight > 0 ? Math.round(bottomBarHeight) + 16 : 0);
+            syncBottomOffsetHost(findFixedHost(toast, 3, 180, 140), vh, toastThreshold);
         }
     }
 

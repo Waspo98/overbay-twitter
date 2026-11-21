@@ -20,10 +20,14 @@
     ]);
 
     let lastKnownPath = "", lastDialogOpen = null, lastDatasetSig = "", lastReportedThemeHex = "";
-    let fullScanPending = true, themeDirty = true, tabsDirty = true, headerDirty = true, dialogDirty = true;
+    let fullScanPending = true, themeDirty = true, tabsDirty = true, headerDirty = true, dialogDirty = true, navInsetsDirty = true;
     let htmlObserved = false, bodyObserved = false, nativeDarkIsDim = false;
     let checkedLogoSvgs = new WeakSet();
     const dirtyRoots = new Set();
+    const NAV_INSET_TESTIDS = new Set([
+        "FloatingActionButtons_Tweet_Button", "inline_reply_offscreen", "dmComposerTextInput", "toolBar", "toast"
+    ]);
+    const NAV_INSET_SELECTOR = '[data-testid="FloatingActionButtons_Tweet_Button"], [data-testid="inline_reply_offscreen"], [data-testid="dmComposerTextInput"], [data-testid="toolBar"], [data-testid="toast"]';
 
     const getCfg = () => window.__TWITTER_CONFIG__ || {};
     const queryWithinRoots = (roots, fullScan, selector) => window.__TW_FEATURES__.queryWithinRoots(roots, fullScan, selector);
@@ -338,10 +342,11 @@
         const fullScan = fullScanPending || pathChanged;
         const checkHeader = fullScan || headerDirty;
         const checkDialog = fullScan || dialogDirty || Boolean(lastDialogOpen);
+        const checkNavInsets = checkHeader || checkDialog || navInsetsDirty;
         const checkTabs = fullScan || tabsDirty;
         const roots = fullScan ? null : Array.from(dirtyRoots);
 
-        fullScanPending = headerDirty = dialogDirty = false;
+        fullScanPending = headerDirty = dialogDirty = navInsetsDirty = false;
         dirtyRoots.clear();
 
         ensureStyleTag();
@@ -354,6 +359,8 @@
         }
         if (checkHeader || checkDialog || fullScan) {
             window.__TW_THEME__?.syncDrawerThemeBars?.(cfg);
+        }
+        if (checkNavInsets) {
             window.__TW_VIEWPORT__?.syncNavInsets?.();
         }
         if (window.__TW_FEATURES__.handleHomeTabs(cfg, checkTabs)) tabsDirty = false;
@@ -417,6 +424,9 @@
                     }
                     if (!headerDirty && (role === "menu" || role === "banner" || el.tagName === "HEADER" || el.tagName === "NAV" || testId === "TopNavBar" || testId === "BottomBar" || testId === "Drawer" || el.querySelector?.('a[href^="/settings"], [data-testid="TopNavBar"], [data-testid="BottomBar"], header[role="banner"]'))) {
                         headerDirty = true;
+                    }
+                    if (!navInsetsDirty && !headerDirty && !dialogDirty && (NAV_INSET_TESTIDS.has(testId) || el.closest?.(NAV_INSET_SELECTOR) || el.querySelector?.(NAV_INSET_SELECTOR))) {
+                        navInsetsDirty = true;
                     }
                 }
                 if (!fullScanPending && !hasTrackedAncestor(el)) {
