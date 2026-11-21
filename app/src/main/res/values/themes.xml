@@ -3,6 +3,8 @@
 
     <style name="Theme.Twitter" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:isLightTheme" tools:targetApi="q">true</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">true</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">#FFFFFF</item>

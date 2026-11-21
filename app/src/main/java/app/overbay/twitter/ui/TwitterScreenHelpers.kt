@@ -10,10 +10,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -54,13 +56,20 @@ internal fun SyncSystemBarsEffect(
     activity: ComponentActivity?,
     view: View,
     surfaceTheme: TwitterSurfaceTheme,
-    isFullscreenVideo: Boolean
+    isFullscreenVideo: Boolean,
+    systemBarSyncToken: Int = 0,
+    onLightSystemBarsChange: (Boolean) -> Unit = {}
 ) {
-    DisposableEffect(activity, view, surfaceTheme, isFullscreenVideo) {
+    val latestOnLightSystemBarsChange by rememberUpdatedState(onLightSystemBarsChange)
+    val lightBars = surfaceTheme.isLight && !isFullscreenVideo
+    SideEffect {
+        latestOnLightSystemBarsChange(lightBars)
+    }
+    DisposableEffect(activity, view, lightBars, isFullscreenVideo, systemBarSyncToken) {
         val window = activity?.window
         if (window != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
             val insetsController = WindowCompat.getInsetsController(window, view)
-            val lightBars = surfaceTheme.isLight && !isFullscreenVideo
             insetsController.isAppearanceLightStatusBars = lightBars
             insetsController.isAppearanceLightNavigationBars = lightBars
             if (isFullscreenVideo) {

@@ -62,7 +62,9 @@ fun TwitterAppScreen(
     repository: TwitterConfigRepository,
     deepLinkUrl: String?,
     onDeepLinkConsumed: () -> Unit,
-    onFirstLoadComplete: () -> Unit
+    onFirstLoadComplete: () -> Unit,
+    systemBarSyncToken: Int = 0,
+    onLightSystemBarsChange: (Boolean) -> Unit = {}
 ) {
     val config by repository.config.collectAsStateWithLifecycle()
     val configJson = remember(config) { repository.toJsonString(config) }
@@ -138,7 +140,9 @@ fun TwitterAppScreen(
         activity = activity,
         view = view,
         surfaceTheme = surfaceTheme,
-        isFullscreenVideo = customVideoView != null
+        isFullscreenVideo = customVideoView != null,
+        systemBarSyncToken = systemBarSyncToken,
+        onLightSystemBarsChange = onLightSystemBarsChange
     )
 
     DisposableEffect(controller) {

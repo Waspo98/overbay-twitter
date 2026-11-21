@@ -10,6 +10,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -26,6 +27,8 @@ class MainActivity : ComponentActivity() {
 
     private var deepLinkUrl by mutableStateOf<String?>(null)
     private var lastNightModeMask: Int = 0
+    private var systemBarSyncToken by mutableIntStateOf(0)
+    private var useLightSystemBars = false
 
     @Volatile
     private var isWebViewReady = false
@@ -34,6 +37,11 @@ class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         splashScreen.setKeepOnScreenCondition { !isWebViewReady }
         splashScreen.setOnExitAnimationListener { splashView ->
+            // SplashScreen$Impl31 resets bar appearance from XML right before invoking this callback;
+            // restore the active app bar style synchronously so the fade-out reveals crisp icons.
+            applySystemBarEdgeToEdge(useLightSystemBars)
+            systemBarSyncToken++
+
             val interpolator = DecelerateInterpolator()
             runCatching { splashView.iconView }.getOrNull()?.animate()
                 ?.scaleX(1.08f)
@@ -59,15 +67,8 @@ class MainActivity : ComponentActivity() {
             autoDarkVariant = repository.config.value.autoDarkVariant
         )
         val persistedLight = TwitterSurfaceTheme.fromColorInt(initialColorInt).isLight
-        val initialBarStyle = if (persistedLight) {
-            SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
-        } else {
-            SystemBarStyle.dark(Color.TRANSPARENT)
-        }
-        enableEdgeToEdge(
-            statusBarStyle = initialBarStyle,
-            navigationBarStyle = initialBarStyle
-        )
+        useLightSystemBars = persistedLight
+        applySystemBarEdgeToEdge(persistedLight)
 
         handleIncomingIntent(intent)
 
@@ -76,8 +77,17 @@ class MainActivity : ComponentActivity() {
                 repository = repository,
                 deepLinkUrl = deepLinkUrl,
                 onDeepLinkConsumed = { deepLinkUrl = null },
-                onFirstLoadComplete = { isWebViewReady = true }
+                onFirstLoadComplete = { isWebViewReady = true },
+                systemBarSyncToken = systemBarSyncToken,
+                onLightSystemBarsChange = { useLightSystemBars = it }
             )
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            systemBarSyncToken++
         }
     }
 
@@ -89,8 +99,21 @@ class MainActivity : ComponentActivity() {
             val refreshedTheme = resources.newTheme()
             refreshedTheme.applyStyle(R.style.Theme_Twitter, true)
             theme.setTo(refreshedTheme)
+            systemBarSyncToken++
         }
         super.onConfigurationChanged(newConfig)
+    }
+
+    private fun applySystemBarEdgeToEdge(lightBars: Boolean) {
+        val barStyle = if (lightBars) {
+            SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        } else {
+            SystemBarStyle.dark(Color.TRANSPARENT)
+        }
+        enableEdgeToEdge(
+            statusBarStyle = barStyle,
+            navigationBarStyle = barStyle
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
