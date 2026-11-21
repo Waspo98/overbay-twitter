@@ -32,6 +32,8 @@ internal class TwitterWebViewClient(
     private val configJsonRef: AtomicReference<String>,
     private val isSystemDarkRef: AtomicReference<Boolean>,
     private val themeColorRef: AtomicInteger,
+    private val consumeFallbackRestoreJson: () -> String? = { null },
+    private val onClearOneShotRestoreScript: () -> Unit = {},
     private val onCanGoBackChange: (Boolean) -> Unit,
     private val onFirstLoadComplete: () -> Unit,
     private val onMainFrameError: (String?) -> Unit,
@@ -46,7 +48,8 @@ internal class TwitterWebViewClient(
             view.evaluateJavascript(
                 assetBundle.buildConfigSeedScript(
                     configJson = configJsonRef.get(),
-                    isSystemDark = isSystemDarkRef.get()
+                    isSystemDark = isSystemDarkRef.get(),
+                    restoreStateJson = consumeFallbackRestoreJson()
                 ),
                 null
             )
@@ -73,6 +76,7 @@ internal class TwitterWebViewClient(
 
     override fun onPageFinished(view: WebView, url: String?) {
         super.onPageFinished(view, url)
+        onClearOneShotRestoreScript()
         controller.swipeRefresh?.isRefreshing = false
         CookieManager.getInstance().flush()
         onCanGoBackChange(view.canGoBack())

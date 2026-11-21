@@ -51,7 +51,7 @@ fun TwitterWebView(
     initialThemeColorInt: Int,
     config: TwitterModConfig,
     configJson: String,
-    isExpandedLayout: Boolean,
+    preferDesktopUserAgent: Boolean,
     isSystemDark: Boolean,
     controller: TwitterWebController,
     onOpenSettings: () -> Unit,
@@ -110,6 +110,8 @@ fun TwitterWebView(
 
     val configScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
     val coreScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
+    val restoreScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
+    val fallbackRestoreJsonRef = remember { AtomicReference<String?>(null) }
     val ownedWebViewRef = remember { AtomicReference<WebView?>(null) }
     val ownedSwipeRefreshRef = remember { AtomicReference<SwipeRefreshLayout?>(null) }
     val lastSeededStateRef = remember { AtomicReference<Pair<String, Boolean>?>(null) }
@@ -182,10 +184,13 @@ fun TwitterWebView(
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                 configScriptHandlerRef.getAndSet(null)?.remove()
                 coreScriptHandlerRef.getAndSet(null)?.remove()
+                restoreScriptHandlerRef.getAndSet(null)?.remove()
             } else {
                 configScriptHandlerRef.set(null)
                 coreScriptHandlerRef.set(null)
+                restoreScriptHandlerRef.set(null)
             }
+            fallbackRestoreJsonRef.set(null)
             val wv = ownedWebViewRef.getAndSet(null)
             val sr = ownedSwipeRefreshRef.getAndSet(null)
             if (wv != null && WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
@@ -227,13 +232,13 @@ fun TwitterWebView(
                     }
                     userAgentString = TwitterRequestBlocker.buildEffectiveUserAgent(
                         userAgentString,
-                        isExpandedLayout
+                        preferDesktopUserAgent
                     )
                     if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
                         runCatching {
                             val currentMeta = WebSettingsCompat.getUserAgentMetadata(this)
                             val updatedMeta = UserAgentMetadata.Builder(currentMeta)
-                                .setMobile(!isExpandedLayout)
+                                .setMobile(!preferDesktopUserAgent)
                                 .build()
                             WebSettingsCompat.setUserAgentMetadata(this, updatedMeta)
                         }
@@ -283,10 +288,21 @@ fun TwitterWebView(
                 }
 
                 val docStartSupported = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+                val pendingRestoreJson = controller.consumePendingRestoreStateJson()
                 if (docStartSupported) {
                     val initialJson = configJsonRef.get()
                     val initialDark = isSystemDarkRef.get()
                     lastSeededStateRef.set(initialJson to initialDark)
+                    if (!pendingRestoreJson.isNullOrBlank()) {
+                        val restoreHandler = runCatching {
+                            WebViewCompat.addDocumentStartJavaScript(
+                                this,
+                                "window.__TWITTER_RESTORE_STATE__ = $pendingRestoreJson;",
+                                ORIGIN_ALLOWLIST
+                            )
+                        }.getOrNull()
+                        restoreScriptHandlerRef.set(restoreHandler)
+                    }
                     registerConfigStartScript(this, initialJson, initialDark)
                     val coreHandler = runCatching {
                         WebViewCompat.addDocumentStartJavaScript(
@@ -296,6 +312,8 @@ fun TwitterWebView(
                         )
                     }.getOrNull()
                     coreScriptHandlerRef.set(coreHandler)
+                } else {
+                    fallbackRestoreJsonRef.set(pendingRestoreJson)
                 }
 
                 webViewClient = TwitterWebViewClient(
@@ -307,6 +325,14 @@ fun TwitterWebView(
                     configJsonRef = configJsonRef,
                     isSystemDarkRef = isSystemDarkRef,
                     themeColorRef = themeColorRef,
+                    consumeFallbackRestoreJson = { fallbackRestoreJsonRef.getAndSet(null) },
+                    onClearOneShotRestoreScript = {
+                        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                            restoreScriptHandlerRef.getAndSet(null)?.remove()
+                        } else {
+                            restoreScriptHandlerRef.set(null)
+                        }
+                    },
                     onCanGoBackChange = { latestOnCanGoBack(it) },
                     onFirstLoadComplete = { latestOnFirstLoad() },
                     onMainFrameError = { latestOnMainFrameError(it) },

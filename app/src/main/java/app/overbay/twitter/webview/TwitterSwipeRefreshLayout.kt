@@ -1,6 +1,7 @@
 package app.overbay.twitter.webview
 
 import android.content.Context
+import android.content.res.Configuration
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -12,10 +13,15 @@ import kotlin.math.abs
  */
 internal class TwitterSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(context) {
 
-    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private var touchSlop = ViewConfiguration.get(context).scaledTouchSlop
     private var downX = 0f
     private var downY = 0f
     private var declined = false
+
+    override fun onConfigurationChanged(newConfig: Configuration?) {
+        super.onConfigurationChanged(newConfig)
+        touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    }
 
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {

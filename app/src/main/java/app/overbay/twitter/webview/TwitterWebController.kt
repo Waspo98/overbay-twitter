@@ -11,6 +11,10 @@ import app.overbay.twitter.model.TwitterDarkVariant
 import app.overbay.twitter.model.TwitterThemeMode
 import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.resume
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Controller exposed to [app.overbay.twitter.ui.TwitterAppScreen] for navigation, reload,
@@ -28,7 +32,8 @@ class TwitterWebController {
     private var themeSyncGeneration = 0
     private var pendingFallbackRunnable: Runnable? = null
     private var pendingFallbackTargetDark: Boolean? = null
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private var pendingRestoreStateJson: String? = null
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
 
     fun reload() {
         val wv = webView ?: return
@@ -59,6 +64,62 @@ class TwitterWebController {
         }
         return lastKnownUrl
     }
+
+    internal fun stageRestoreLocationJson(rawJson: String?) {
+        val normalized = normalizeCapturedLocationJson(rawJson)
+        pendingRestoreStateJson = normalized
+        extractUrlFromLocationJson(normalized)?.let { lastKnownUrl = it }
+    }
+
+    internal fun consumePendingRestoreStateJson(): String? {
+        val staged = pendingRestoreStateJson
+        pendingRestoreStateJson = null
+        return staged
+    }
+
+    /**
+     * Attempts a zero-reload live viewport & layout transition across foldable display changes,
+     * preserving scroll position and live timeline state. Returns `true` when X's layout aligns
+     * cleanly in-place, or `false` (with location staged for restoration) if WebView recreation
+     * is required as a fallback.
+     */
+    internal suspend fun attemptLiveLayoutTransition(
+        expectedWidthDp: Int,
+        expectExpanded: Boolean
+    ): Boolean {
+        val wv = webView ?: return false
+        val capturedJson = evaluateJsWithTimeout(
+            wv,
+            "window.__twCaptureLocation ? window.__twCaptureLocation() : null"
+        )
+        swipeRefresh?.requestLayout()
+        wv.requestLayout()
+        wv.invalidate()
+        wv.evaluateJavascript(
+            "window.__twReflowViewport && window.__twReflowViewport($expectedWidthDp, $expectExpanded);",
+            null
+        )
+        delay(FoldableLayoutPolicy.LIVE_REFLOW_VERIFY_DELAY_MS)
+        if (webView !== wv) return true
+        val alignedRaw = evaluateJsWithTimeout(
+            wv,
+            "Boolean(window.__twCheckLayoutAligned && window.__twCheckLayoutAligned($expectExpanded, $expectedWidthDp))"
+        )
+        if (alignedRaw?.trim() == "true") {
+            return true
+        }
+        stageRestoreLocationJson(capturedJson)
+        return false
+    }
+
+    private suspend fun evaluateJsWithTimeout(webView: WebView, script: String): String? =
+        withTimeoutOrNull(JS_PROBE_TIMEOUT_MS) {
+            suspendCancellableCoroutine { cont ->
+                webView.evaluateJavascript(script) { value ->
+                    if (cont.isActive) cont.resume(value)
+                }
+            }
+        }
 
     fun clearCacheAndReload() {
         webView?.clearCache(true)
@@ -222,7 +283,23 @@ class TwitterWebController {
     companion object {
         const val DEFAULT_HOME_URL = "https://x.com/home"
         private const val THEME_FALLBACK_RELOAD_DELAY_MS = 380L
+        private const val JS_PROBE_TIMEOUT_MS = 750L
         private val NIGHT_MODE_COOKIE_REGEX = Regex("""(?:^|;\s*)night_mode=([012])(?:\s*;|$)""")
+        private val CAPTURED_URL_REGEX = Regex(""""url"\s*:\s*"((?:[^"\\]|\\.)*)"""")
+
+        internal fun normalizeCapturedLocationJson(rawJson: String?): String? {
+            val trimmed = rawJson?.trim() ?: return null
+            if (trimmed.isEmpty() || trimmed == "null" || trimmed == "undefined") return null
+            if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null
+            return trimmed
+        }
+
+        internal fun extractUrlFromLocationJson(locationJson: String?): String? {
+            val normalized = normalizeCapturedLocationJson(locationJson) ?: return null
+            val match = CAPTURED_URL_REGEX.find(normalized) ?: return null
+            val unescaped = match.groupValues[1].replace("\\/", "/")
+            return unescaped.takeIf { isSafeInternalUrl(it) }
+        }
 
         internal fun extractNightModeCookie(cookieHeader: String?): String? {
             if (cookieHeader.isNullOrBlank()) return null

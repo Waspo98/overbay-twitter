@@ -313,8 +313,14 @@
             window.__TW_FEATURES__.upgradeLightboxImages(cfg);
         }
         window.__TW_FEATURES__.enforceVideoAutoplayPause(cfg, roots, fullScan);
+        window.__TW_FEATURES__.tryApplyPendingScrollRestore?.();
         lastKnownPath = location.pathname;
     }
+
+    window.__TW_RUN_DOM_PASS__ = () => {
+        fullScanPending = headerDirty = tabsDirty = themeDirty = true;
+        runDomPass();
+    };
 
     let rafPending = false;
     function schedulePass() {

@@ -193,6 +193,24 @@ class TwitterWebEngineTest {
         assertFalse(TwitterWebController.isSafeInternalUrl("http://x.com/home"))
         assertFalse(TwitterWebController.isSafeInternalUrl("https://ads.twitter.com/pixel"))
         assertFalse(TwitterWebController.isSafeInternalUrl("https://example.com/status/1"))
+
+        val locationJson = """{"url":"https:\/\/x.com\/user\/status\/998877","scrollY":420,"anchorTweetId":"998877","activeHomeTab":"Following"}"""
+        assertEquals(locationJson, TwitterWebController.normalizeCapturedLocationJson(" $locationJson "))
+        assertNull(TwitterWebController.normalizeCapturedLocationJson("null"))
+        assertNull(TwitterWebController.normalizeCapturedLocationJson("\"not-an-object\""))
+        assertEquals(
+            "https://x.com/user/status/998877",
+            TwitterWebController.extractUrlFromLocationJson(locationJson)
+        )
+        assertNull(
+            TwitterWebController.extractUrlFromLocationJson("""{"url":"https://example.com/evil","scrollY":10}""")
+        )
+
+        val controller = TwitterWebController()
+        controller.stageRestoreLocationJson(locationJson)
+        assertEquals("https://x.com/user/status/998877", controller.lastKnownUrl)
+        assertEquals(locationJson, controller.consumePendingRestoreStateJson())
+        assertNull(controller.consumePendingRestoreStateJson())
     }
 
     @Test
@@ -232,6 +250,10 @@ class TwitterWebEngineTest {
         assertTrue(features.contains("getCfg().disableVideoAutoplay"))
         assertFalse(features.contains("aria-labelledby=\"modal-header\""))
         assertTrue(features.contains("[data-testid=\"UserName\"]"))
+        assertTrue(features.contains("__twCaptureLocation"))
+        assertTrue(features.contains("__twReflowViewport"))
+        assertTrue(features.contains("__twCheckLayoutAligned"))
+        assertTrue(features.contains("tryApplyPendingScrollRestore"))
 
         // DOM engine contracts
         assertTrue(dom.contains("[role='menuitem'] span"))

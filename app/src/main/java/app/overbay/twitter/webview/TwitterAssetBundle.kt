@@ -35,9 +35,16 @@ class TwitterAssetBundle private constructor(
 
     fun buildConfigSeedScript(
         configJson: String,
-        isSystemDark: Boolean = false
+        isSystemDark: Boolean = false,
+        restoreStateJson: String? = null
     ): String {
-        return buildString(configJson.length + 192) {
+        val extraLen = restoreStateJson?.length ?: 0
+        return buildString(configJson.length + extraLen + 240) {
+            if (!restoreStateJson.isNullOrBlank()) {
+                append("window.__TWITTER_RESTORE_STATE__ = ")
+                append(restoreStateJson)
+                append(";\n")
+            }
             append("window.__TWITTER_SYSTEM_DARK__ = ")
             append(isSystemDark)
             append(";\nwindow.__TWITTER_CONFIG__ = ")

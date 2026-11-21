@@ -17,7 +17,8 @@ data class DisplayLayoutState(
  */
 object FoldableLayoutPolicy {
     const val EXPANDED_WIDTH_BREAKPOINT_DP = 500
-    const val TRANSITION_SETTLE_DELAY_MS = 200L
+    const val TRANSITION_SETTLE_DELAY_MS = 180L
+    const val LIVE_REFLOW_VERIFY_DELAY_MS = 380L
 
     fun resolve(
         screenWidthDp: Int,

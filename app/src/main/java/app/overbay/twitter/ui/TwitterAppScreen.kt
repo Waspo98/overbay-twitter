@@ -115,6 +115,7 @@ fun TwitterAppScreen(
     var sessionStats by remember { mutableStateOf(SessionFilterStats()) }
     var mainFrameError by remember { mutableStateOf<String?>(null) }
     var webViewEpoch by remember { mutableIntStateOf(0) }
+    var preferDesktopUserAgent by remember { mutableStateOf(false) }
 
     val pendingReload = remember(config, appliedGraphQlConfig) {
         config.requiresReloadComparedTo(appliedGraphQlConfig)
@@ -197,8 +198,15 @@ fun TwitterAppScreen(
         if (!FoldableLayoutPolicy.shouldRecreateWebView(committedLayoutState, currentLayoutState)) {
             return@LaunchedEffect
         }
+        val stayedLive = controller.attemptLiveLayoutTransition(
+            expectedWidthDp = configuration.screenWidthDp,
+            expectExpanded = currentLayoutState.isExpanded
+        )
         committedLayoutState = currentLayoutState
-        recreateWebView(clearCustomView = true)
+        if (!stayedLive) {
+            preferDesktopUserAgent = currentLayoutState.isExpanded
+            recreateWebView(clearCustomView = true)
+        }
     }
 
     fun applyThemeSelection(
@@ -260,7 +268,7 @@ fun TwitterAppScreen(
                     initialThemeColorInt = webThemeColorInt,
                     config = config,
                     configJson = configJson,
-                    isExpandedLayout = committedLayoutState.isExpanded,
+                    preferDesktopUserAgent = preferDesktopUserAgent,
                     isSystemDark = systemDark,
                     controller = controller,
                     onOpenSettings = { showSettingsSheet = true },
@@ -316,7 +324,7 @@ fun TwitterAppScreen(
                     .align(Alignment.BottomCenter)
                     .systemBarsPadding()
                     .imePadding()
-                    .padding(bottom = if (committedLayoutState.isExpanded) 16.dp else 58.dp)
+                    .padding(bottom = if (currentLayoutState.isExpanded) 16.dp else 58.dp)
             )
         }
 
