@@ -1,9 +1,8 @@
 package app.overbay.twitter.webview
 
 /**
- * Display layout posture & density snapshot used to decide when the WebView must be cleanly
- * recreated (e.g., folding/unfolding a foldable display, entering/exiting narrow split-screen,
- * or changing system display density).
+ * Display layout posture & density snapshot used to detect foldable/split-screen/DPI changes
+ * that require a live viewport reflow (with WebView recreation as fallback).
  */
 data class DisplayLayoutState(
     val isExpanded: Boolean,
@@ -13,7 +12,7 @@ data class DisplayLayoutState(
 /**
  * Pure-Kotlin classifier matching X.com's 500px responsive breakpoint so zoomed unfolded inner
  * displays (550–599dp) and narrow split-screen panes (<500dp) classify accurately while simple
- * portrait/landscape rotations never trigger unnecessary WebView recreations.
+ * portrait/landscape rotations never trigger unnecessary layout transitions.
  */
 object FoldableLayoutPolicy {
     const val EXPANDED_WIDTH_BREAKPOINT_DP = 500
@@ -40,8 +39,16 @@ object FoldableLayoutPolicy {
         )
     }
 
-    fun shouldRecreateWebView(
+    fun requiresLayoutTransition(
         committed: DisplayLayoutState,
         current: DisplayLayoutState
     ): Boolean = committed != current
+
+    fun expectsWideViewport(
+        screenWidthDp: Int,
+        fallbackExpanded: Boolean = false
+    ): Boolean = if (screenWidthDp > 0) screenWidthDp >= EXPANDED_WIDTH_BREAKPOINT_DP else fallbackExpanded
+
+    fun expectedDevicePixelRatio(densityDpi: Int): Float =
+        if (densityDpi > 0) densityDpi / 160f else 0f
 }

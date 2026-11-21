@@ -147,28 +147,36 @@ class TwitterWebEngineTest {
         assertTrue(unfoldedPortrait.isExpanded)
         assertTrue(unfoldedLandscape.isExpanded)
         assertTrue(unfoldedZoomed.isExpanded)
-        // Rotating an unfolded foldable does not trigger recreation
-        assertFalse(FoldableLayoutPolicy.shouldRecreateWebView(unfoldedPortrait, unfoldedLandscape))
+        // Rotating an unfolded foldable does not trigger a layout transition
+        assertFalse(FoldableLayoutPolicy.requiresLayoutTransition(unfoldedPortrait, unfoldedLandscape))
 
         val foldedPortrait = FoldableLayoutPolicy.resolve(384, 384, 420)
         val foldedLandscape = FoldableLayoutPolicy.resolve(840, 384, 420)
         assertFalse(foldedPortrait.isExpanded)
         assertFalse(foldedLandscape.isExpanded)
-        // Rotating a folded phone / slab phone for fullscreen video does not trigger recreation
-        assertFalse(FoldableLayoutPolicy.shouldRecreateWebView(foldedPortrait, foldedLandscape))
+        // Rotating a folded phone / slab phone for fullscreen video does not trigger a transition
+        assertFalse(FoldableLayoutPolicy.requiresLayoutTransition(foldedPortrait, foldedLandscape))
 
-        // Folding and unfolding trigger recreation
-        assertTrue(FoldableLayoutPolicy.shouldRecreateWebView(unfoldedPortrait, foldedPortrait))
-        assertTrue(FoldableLayoutPolicy.shouldRecreateWebView(foldedPortrait, unfoldedPortrait))
+        // Folding and unfolding trigger layout transitions
+        assertTrue(FoldableLayoutPolicy.requiresLayoutTransition(unfoldedPortrait, foldedPortrait))
+        assertTrue(FoldableLayoutPolicy.requiresLayoutTransition(foldedPortrait, unfoldedPortrait))
 
         // 50/50 split-screen on an unfolded foldable drops below 500dp and triggers compact layout
         val splitScreenHalf = FoldableLayoutPolicy.resolve(345, 690, 420)
         assertFalse(splitScreenHalf.isExpanded)
-        assertTrue(FoldableLayoutPolicy.shouldRecreateWebView(unfoldedPortrait, splitScreenHalf))
+        assertTrue(FoldableLayoutPolicy.requiresLayoutTransition(unfoldedPortrait, splitScreenHalf))
 
-        // Density change alone (e.g. cover display with higher DPI or Display Size toggle) recreates
+        // Density change alone (e.g. cover display with higher DPI or Display Size toggle) triggers transition
         val higherDpiFolded = FoldableLayoutPolicy.resolve(384, 384, 480)
-        assertTrue(FoldableLayoutPolicy.shouldRecreateWebView(foldedPortrait, higherDpiFolded))
+        assertTrue(FoldableLayoutPolicy.requiresLayoutTransition(foldedPortrait, higherDpiFolded))
+
+        // Wide viewport expectation tracks actual viewport width (including folded landscape) & DPR
+        assertTrue(FoldableLayoutPolicy.expectsWideViewport(840, fallbackExpanded = false))
+        assertFalse(FoldableLayoutPolicy.expectsWideViewport(384, fallbackExpanded = true))
+        assertTrue(FoldableLayoutPolicy.expectsWideViewport(0, fallbackExpanded = true))
+        assertEquals(2.625f, FoldableLayoutPolicy.expectedDevicePixelRatio(420), 0.0001f)
+        assertEquals(3.0f, FoldableLayoutPolicy.expectedDevicePixelRatio(480), 0.0001f)
+        assertEquals(0f, FoldableLayoutPolicy.expectedDevicePixelRatio(0), 0.0001f)
 
         // Transient undefined Configuration dimensions preserve the prior fallback state safely
         val transientUndefined = FoldableLayoutPolicy.resolve(0, 0, 420, fallback = unfoldedPortrait)
@@ -219,12 +227,14 @@ class TwitterWebEngineTest {
         val interceptor = File(assetsDir, "twitter-interceptor.js").readText()
         val theme = File(assetsDir, "twitter-theme.js").readText()
         val features = File(assetsDir, "twitter-features.js").readText()
+        val viewport = File(assetsDir, "twitter-viewport.js").readText()
         val dom = File(assetsDir, "twitter-dom.js").readText()
         val css = File(assetsDir, "twitter-clean.css").readText()
 
         assertTrue("twitter-interceptor.js exceeds 450 lines", interceptor.lines().size <= 450)
         assertTrue("twitter-theme.js exceeds 450 lines", theme.lines().size <= 450)
         assertTrue("twitter-features.js exceeds 450 lines", features.lines().size <= 450)
+        assertTrue("twitter-viewport.js exceeds 450 lines", viewport.lines().size <= 450)
         assertTrue("twitter-dom.js exceeds 450 lines", dom.lines().size <= 450)
         assertTrue("twitter-clean.css exceeds 450 lines", css.lines().size <= 450)
 
@@ -250,10 +260,15 @@ class TwitterWebEngineTest {
         assertTrue(features.contains("getCfg().disableVideoAutoplay"))
         assertFalse(features.contains("aria-labelledby=\"modal-header\""))
         assertTrue(features.contains("[data-testid=\"UserName\"]"))
-        assertTrue(features.contains("__twCaptureLocation"))
-        assertTrue(features.contains("__twReflowViewport"))
-        assertTrue(features.contains("__twCheckLayoutAligned"))
-        assertTrue(features.contains("tryApplyPendingScrollRestore"))
+
+        // Viewport & location-restore engine contracts
+        assertTrue(viewport.contains("window.__TW_VIEWPORT__"))
+        assertTrue(viewport.contains("__twCaptureLocation"))
+        assertTrue(viewport.contains("__twCancelReflow"))
+        assertTrue(viewport.contains("__twReflowViewport"))
+        assertTrue(viewport.contains("__twCheckLayoutAligned"))
+        assertTrue(viewport.contains("window.devicePixelRatio"))
+        assertTrue(viewport.contains("tryApplyPendingScrollRestore"))
 
         // DOM engine contracts
         assertTrue(dom.contains("[role='menuitem'] span"))

@@ -168,11 +168,11 @@ object TwitterRequestBlocker {
         return if (normalized.isNotEmpty()) normalized.toTypedArray() else arrayOf("image/*", "video/*")
     }
 
-    fun buildEffectiveUserAgent(baseUserAgent: String, isFullyUnfolded: Boolean): String {
+    fun buildEffectiveUserAgent(baseUserAgent: String, preferDesktopUserAgent: Boolean): String {
         val cleaned = baseUserAgent
             .replace("; wv", "")
             .replace("Version/4.0 ", "")
-        return if (isFullyUnfolded) {
+        return if (preferDesktopUserAgent) {
             cleaned.replace(mobileBeforeSafariRegex, "")
         } else if (mobileWordRegex.containsMatchIn(cleaned)) {
             cleaned

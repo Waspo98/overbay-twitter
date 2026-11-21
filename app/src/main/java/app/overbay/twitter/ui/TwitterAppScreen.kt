@@ -25,6 +25,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,6 +72,7 @@ fun TwitterAppScreen(
     val activity = remember(context) { context.findComponentActivity() }
     val systemDark = isSystemInDarkTheme()
     val isActivityResumed = rememberActivityResumed()
+    val latestScreenWidthDp by rememberUpdatedState(configuration.screenWidthDp)
 
     var committedLayoutState by remember {
         mutableStateOf(
@@ -115,7 +117,8 @@ fun TwitterAppScreen(
     var sessionStats by remember { mutableStateOf(SessionFilterStats()) }
     var mainFrameError by remember { mutableStateOf<String?>(null) }
     var webViewEpoch by remember { mutableIntStateOf(0) }
-    var preferDesktopUserAgent by remember { mutableStateOf(false) }
+    var preferDesktopUserAgent by remember { mutableStateOf(committedLayoutState.isExpanded) }
+    var reflowTouchedWebView by remember { mutableStateOf(false) }
 
     val pendingReload = remember(config, appliedGraphQlConfig) {
         config.requiresReloadComparedTo(appliedGraphQlConfig)
@@ -180,6 +183,9 @@ fun TwitterAppScreen(
         } else {
             controller.customViewCallback = null
         }
+        committedLayoutState = currentLayoutState
+        preferDesktopUserAgent = currentLayoutState.isExpanded
+        reflowTouchedWebView = false
         isWebViewAttached = false
         customVideoView = null
         canGoBack = false
@@ -191,20 +197,27 @@ fun TwitterAppScreen(
 
     LaunchedEffect(currentLayoutState, isActivityResumed, isWebViewAttached) {
         if (!isActivityResumed || !isWebViewAttached) return@LaunchedEffect
-        if (!FoldableLayoutPolicy.shouldRecreateWebView(committedLayoutState, currentLayoutState)) {
+        if (!FoldableLayoutPolicy.requiresLayoutTransition(committedLayoutState, currentLayoutState) &&
+            !reflowTouchedWebView
+        ) {
             return@LaunchedEffect
         }
         delay(FoldableLayoutPolicy.TRANSITION_SETTLE_DELAY_MS)
-        if (!FoldableLayoutPolicy.shouldRecreateWebView(committedLayoutState, currentLayoutState)) {
+        if (!FoldableLayoutPolicy.requiresLayoutTransition(committedLayoutState, currentLayoutState) &&
+            !reflowTouchedWebView
+        ) {
             return@LaunchedEffect
         }
+        reflowTouchedWebView = true
         val stayedLive = controller.attemptLiveLayoutTransition(
-            expectedWidthDp = configuration.screenWidthDp,
-            expectExpanded = currentLayoutState.isExpanded
+            expectedWidthDp = latestScreenWidthDp,
+            expectedDensityDpi = currentLayoutState.densityDpi,
+            fallbackExpanded = currentLayoutState.isExpanded
         )
+        reflowTouchedWebView = false
         committedLayoutState = currentLayoutState
+        preferDesktopUserAgent = currentLayoutState.isExpanded
         if (!stayedLive) {
-            preferDesktopUserAgent = currentLayoutState.isExpanded
             recreateWebView(clearCustomView = true)
         }
     }
@@ -324,7 +337,13 @@ fun TwitterAppScreen(
                     .align(Alignment.BottomCenter)
                     .systemBarsPadding()
                     .imePadding()
-                    .padding(bottom = if (currentLayoutState.isExpanded) 16.dp else 58.dp)
+                    .padding(
+                        bottom = if (FoldableLayoutPolicy.expectsWideViewport(
+                                configuration.screenWidthDp,
+                                currentLayoutState.isExpanded
+                            )
+                        ) 16.dp else 58.dp
+                    )
             )
         }
 

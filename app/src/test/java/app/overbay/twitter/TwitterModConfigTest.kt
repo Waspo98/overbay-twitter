@@ -139,19 +139,19 @@ class TwitterModConfigTest {
         val tabletUa = "Mozilla/5.0 (Linux; Android 16; K; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/134.0.0.0 Safari/537.36"
         val mobileUa = "Mozilla/5.0 (Linux; Android 16; K; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/134.0.0.0 Mobile Safari/537.36"
 
-        val splitOrFoldedFromTablet = TwitterRequestBlocker.buildEffectiveUserAgent(tabletUa, isFullyUnfolded = false)
+        val splitOrFoldedFromTablet = TwitterRequestBlocker.buildEffectiveUserAgent(tabletUa, preferDesktopUserAgent = false)
         assertTrue(splitOrFoldedFromTablet.contains("Mobile Safari/537.36"))
         assertFalse(splitOrFoldedFromTablet.contains("; wv"))
         assertFalse(splitOrFoldedFromTablet.contains("Version/4.0"))
 
-        val splitOrFoldedFromMobile = TwitterRequestBlocker.buildEffectiveUserAgent(mobileUa, isFullyUnfolded = false)
+        val splitOrFoldedFromMobile = TwitterRequestBlocker.buildEffectiveUserAgent(mobileUa, preferDesktopUserAgent = false)
         assertEquals(splitOrFoldedFromTablet, splitOrFoldedFromMobile)
 
-        val unfoldedFromMobile = TwitterRequestBlocker.buildEffectiveUserAgent(mobileUa, isFullyUnfolded = true)
+        val unfoldedFromMobile = TwitterRequestBlocker.buildEffectiveUserAgent(mobileUa, preferDesktopUserAgent = true)
         assertFalse(unfoldedFromMobile.contains("Mobile"))
         assertTrue(unfoldedFromMobile.contains("Chrome/134.0.0.0 Safari/537.36"))
 
-        val unfoldedFromTablet = TwitterRequestBlocker.buildEffectiveUserAgent(tabletUa, isFullyUnfolded = true)
+        val unfoldedFromTablet = TwitterRequestBlocker.buildEffectiveUserAgent(tabletUa, preferDesktopUserAgent = true)
         assertEquals(unfoldedFromMobile, unfoldedFromTablet)
     }
 

@@ -313,7 +313,7 @@
             window.__TW_FEATURES__.upgradeLightboxImages(cfg);
         }
         window.__TW_FEATURES__.enforceVideoAutoplayPause(cfg, roots, fullScan);
-        window.__TW_FEATURES__.tryApplyPendingScrollRestore?.();
+        window.__TW_VIEWPORT__?.tryApplyPendingScrollRestore?.();
         lastKnownPath = location.pathname;
     }
 

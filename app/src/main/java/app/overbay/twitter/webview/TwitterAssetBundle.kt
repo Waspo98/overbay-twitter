@@ -13,11 +13,13 @@ class TwitterAssetBundle private constructor(
     interceptorJs: String,
     themeJs: String,
     featuresJs: String,
+    viewportJs: String,
     domJs: String,
     quotedCss: String
 ) {
     val coreEngineScript: String = buildString(
-        BRIDGE_SHIM_JS.length + quotedCss.length + interceptorJs.length + themeJs.length + featuresJs.length + domJs.length + 112
+        BRIDGE_SHIM_JS.length + quotedCss.length + interceptorJs.length + themeJs.length +
+            featuresJs.length + viewportJs.length + domJs.length + 128
     ) {
         append("window.__TWITTER_CLEAN_CSS__ = ")
         append(quotedCss)
@@ -29,6 +31,8 @@ class TwitterAssetBundle private constructor(
         append(themeJs)
         append("\n;\n")
         append(featuresJs)
+        append("\n;\n")
+        append(viewportJs)
         append("\n;\n")
         append(domJs)
     }
@@ -69,9 +73,10 @@ class TwitterAssetBundle private constructor(
             val interceptorJs = readAsset(context, "twitter-interceptor.js")
             val themeJs = readAsset(context, "twitter-theme.js")
             val featuresJs = readAsset(context, "twitter-features.js")
+            val viewportJs = readAsset(context, "twitter-viewport.js")
             val domJs = readAsset(context, "twitter-dom.js")
             val quotedCss = JSONObject.quote(readAsset(context, "twitter-clean.css"))
-            return TwitterAssetBundle(interceptorJs, themeJs, featuresJs, domJs, quotedCss)
+            return TwitterAssetBundle(interceptorJs, themeJs, featuresJs, viewportJs, domJs, quotedCss)
         }
 
         private fun readAsset(context: Context, name: String): String {

@@ -145,8 +145,9 @@
             const wantKey = String(restoreTab || cfg.defaultHomeFeed || "For you").trim().toLowerCase();
             const exact = visible.find((e) => e.key === wantKey);
             const pick = exact || (!activeVisible ? visible[0] : null);
-            if (pick && pick.tab.getAttribute("aria-selected") !== "true") pick.tab.click();
-            if (exact && restoreTab && window.__TWITTER_RESTORE_STATE__) {
+            const needsClick = Boolean(pick && pick.tab.getAttribute("aria-selected") !== "true");
+            if (needsClick) pick.tab.click();
+            if (exact && restoreTab && !needsClick && window.__TWITTER_RESTORE_STATE__) {
                 window.__TWITTER_RESTORE_STATE__.activeHomeTab = null;
             }
             if (exact || wantKey === "for you" || wantKey === "following" || (Date.now() - homeFirstSeenAt >= 4000)) {
@@ -314,111 +315,6 @@
         }
     }
 
-    function findVisibleAnchorTweet() {
-        const vh = window.innerHeight || 800;
-        for (const art of document.querySelectorAll('article[data-testid="tweet"]')) {
-            const r = art.getBoundingClientRect();
-            if (r.height > 0 && r.bottom > 76 && r.top < vh) {
-                const links = art.querySelectorAll('a[href*="/status/"]');
-                let id = null;
-                for (const l of links) {
-                    const m = l.getAttribute("href")?.match(/\/status\/([0-9]+)$/);
-                    if (m) { id = m[1]; break; }
-                }
-                if (!id) id = links[0]?.getAttribute("href")?.match(/\/status\/([0-9]+)/)?.[1] || null;
-                if (id) return { id, top: Math.round(r.top) };
-            }
-        }
-        return null;
-    }
-
-    function scrollToTweetAnchor(anchor) {
-        if (!anchor?.id) return false;
-        for (const art of document.querySelectorAll('article[data-testid="tweet"]')) {
-            if (art.querySelector(`a[href$="/status/${anchor.id}"]`) || art.querySelector(`a[href*="/status/${anchor.id}"]`)) {
-                const r = art.getBoundingClientRect();
-                if (r.height > 0) {
-                    const delta = r.top - (typeof anchor.top === "number" ? anchor.top : 88);
-                    if (Math.abs(delta) > 8) window.scrollBy(0, delta);
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    window.__twCaptureLocation = function () {
-        const anchor = findVisibleAnchorTweet();
-        let activeHomeTab = null;
-        if (location.pathname.startsWith("/home")) {
-            const activeTab = document.querySelector('[data-testid="primaryColumn"] [role="tablist"] [role="tab"][aria-selected="true"]')
-                || document.querySelector('[role="tablist"] [role="tab"][aria-selected="true"]');
-            activeHomeTab = (activeTab?.textContent || "").replace(/\s+/g, " ").trim() || null;
-        }
-        return {
-            url: location.href,
-            scrollY: Math.round(window.scrollY || 0),
-            anchorTweetId: anchor?.id || null,
-            anchorTop: anchor?.top ?? null,
-            activeHomeTab
-        };
-    };
-
-    window.__twReflowViewport = function (expectedWidthDp) {
-        const anchor = findVisibleAnchorTweet();
-        const meta = document.querySelector('meta[name="viewport"]');
-        const orig = meta?.getAttribute("content") || "width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0,viewport-fit=cover";
-        const targetW = Math.max(320, Math.round(Number(expectedWidthDp) || 0));
-        if (meta && targetW > 0) {
-            meta.setAttribute("content", `width=${targetW},initial-scale=1,maximum-scale=1,user-scalable=0,viewport-fit=cover`);
-        }
-        requestAnimationFrame(() => {
-            if (meta) meta.setAttribute("content", orig);
-            window.dispatchEvent(new Event("resize"));
-            window.dispatchEvent(new Event("orientationchange"));
-            setTimeout(() => { scrollToTweetAnchor(anchor); window.__TW_RUN_DOM_PASS__?.(); }, 120);
-            setTimeout(() => { scrollToTweetAnchor(anchor); window.__TW_RUN_DOM_PASS__?.(); }, 300);
-        });
-    };
-
-    window.__twCheckLayoutAligned = function (expectExpanded, expectedWidthDp) {
-        if (!document.querySelector('[data-testid="primaryColumn"], main[role="main"]')) return true;
-        const iw = window.innerWidth || document.documentElement?.clientWidth || 0;
-        const targetW = Number(expectedWidthDp) || 0;
-        const widthClose = targetW <= 0 || Math.abs(iw - targetW) <= Math.max(64, targetW * 0.25);
-        const hasBottomBar = Boolean(document.querySelector('[data-testid="BottomBar"]'));
-        const hasSidePrimaryNav = Boolean(document.querySelector('header[role="banner"] nav[aria-label="Primary"]'));
-        return expectExpanded ? (iw >= 490 && widthClose && !hasBottomBar) : (iw > 0 && iw < 500 && widthClose && !hasSidePrimaryNav);
-    };
-
-    let restoreCancelled = false, restoreStartedAt = 0, restoreInputBound = false;
-    function tryApplyPendingScrollRestore() {
-        const st = window.__TWITTER_RESTORE_STATE__;
-        if (!st || restoreCancelled) { window.__TWITTER_RESTORE_STATE__ = null; return; }
-        if (!restoreInputBound) {
-            restoreInputBound = true;
-            for (const ev of ["pointerdown", "touchstart", "wheel"]) {
-                window.addEventListener(ev, () => { restoreCancelled = true; }, { passive: true, once: true });
-            }
-        }
-        if (!restoreStartedAt) restoreStartedAt = Date.now();
-        if (Date.now() - restoreStartedAt > 6500) { window.__TWITTER_RESTORE_STATE__ = null; return; }
-        if (st.anchorTweetId && scrollToTweetAnchor({ id: st.anchorTweetId, top: st.anchorTop })) {
-            st.anchorTweetId = null;
-            st.scrollY = 0;
-            if (!st.activeHomeTab) window.__TWITTER_RESTORE_STATE__ = null;
-            return;
-        }
-        if (!location.pathname.startsWith("/home") && st.scrollY > 40) {
-            const maxScroll = (document.documentElement?.scrollHeight || 0) - (window.innerHeight || 0);
-            if (maxScroll >= st.scrollY * 0.85) {
-                window.scrollTo(0, st.scrollY);
-                st.scrollY = 0;
-                if (!st.activeHomeTab) window.__TWITTER_RESTORE_STATE__ = null;
-            }
-        }
-    }
-
     window.__TW_FEATURES__ = {
         queryWithinRoots,
         onConfigChanged(cfg) {
@@ -433,7 +329,6 @@
         handleHomeTabs,
         enhanceTweetsAndProfiles,
         upgradeLightboxImages,
-        enforceVideoAutoplayPause,
-        tryApplyPendingScrollRestore
+        enforceVideoAutoplayPause
     };
 })();

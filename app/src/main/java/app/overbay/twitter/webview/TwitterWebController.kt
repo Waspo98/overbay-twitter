@@ -12,6 +12,8 @@ import app.overbay.twitter.model.TwitterThemeMode
 import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
+import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -85,9 +87,12 @@ class TwitterWebController {
      */
     internal suspend fun attemptLiveLayoutTransition(
         expectedWidthDp: Int,
-        expectExpanded: Boolean
+        expectedDensityDpi: Int,
+        fallbackExpanded: Boolean
     ): Boolean {
         val wv = webView ?: return false
+        val expectedDpr = FoldableLayoutPolicy.expectedDevicePixelRatio(expectedDensityDpi)
+        val initialWidthDp = resolveViewportWidthDp(wv, expectedWidthDp, expectedDpr)
         val capturedJson = evaluateJsWithTimeout(
             wv,
             "window.__twCaptureLocation ? window.__twCaptureLocation() : null"
@@ -96,20 +101,36 @@ class TwitterWebController {
         wv.requestLayout()
         wv.invalidate()
         wv.evaluateJavascript(
-            "window.__twReflowViewport && window.__twReflowViewport($expectedWidthDp, $expectExpanded);",
+            "window.__twReflowViewport && window.__twReflowViewport($initialWidthDp);",
             null
         )
-        delay(FoldableLayoutPolicy.LIVE_REFLOW_VERIFY_DELAY_MS)
+        try {
+            delay(FoldableLayoutPolicy.LIVE_REFLOW_VERIFY_DELAY_MS)
+        } catch (ce: CancellationException) {
+            if (webView === wv) {
+                wv.evaluateJavascript("window.__twCancelReflow && window.__twCancelReflow();", null)
+            }
+            throw ce
+        }
         if (webView !== wv) return true
+        val verifiedWidthDp = resolveViewportWidthDp(wv, expectedWidthDp, expectedDpr)
+        val expectWide = FoldableLayoutPolicy.expectsWideViewport(verifiedWidthDp, fallbackExpanded)
         val alignedRaw = evaluateJsWithTimeout(
             wv,
-            "Boolean(window.__twCheckLayoutAligned && window.__twCheckLayoutAligned($expectExpanded, $expectedWidthDp))"
+            "Boolean(window.__twCheckLayoutAligned && window.__twCheckLayoutAligned($expectWide, $verifiedWidthDp, $expectedDpr))"
         )
         if (alignedRaw?.trim() == "true") {
             return true
         }
         stageRestoreLocationJson(capturedJson)
         return false
+    }
+
+    private fun resolveViewportWidthDp(webView: WebView, fallbackWidthDp: Int, expectedDpr: Float): Int {
+        if (webView.width > 0 && expectedDpr > 0f) {
+            return (webView.width / expectedDpr).roundToInt()
+        }
+        return fallbackWidthDp.coerceAtLeast(0)
     }
 
     private suspend fun evaluateJsWithTimeout(webView: WebView, script: String): String? =
