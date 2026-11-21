@@ -7,16 +7,16 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -45,6 +45,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.overbay.twitter.R
 import app.overbay.twitter.model.DetectedHomeFeed
 import app.overbay.twitter.model.SessionFilterStats
@@ -52,6 +53,7 @@ import app.overbay.twitter.model.TwitterDarkVariant
 import app.overbay.twitter.model.TwitterModConfig
 import app.overbay.twitter.model.TwitterThemeMode
 import app.overbay.twitter.ui.theme.TwitterBlue
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Native Material 3 Expressive settings sheet controlling every Twitter WebView mod toggle.
@@ -60,8 +62,8 @@ import app.overbay.twitter.ui.theme.TwitterBlue
 @Composable
 fun TwitterModSettingsSheet(
     config: TwitterModConfig,
-    detectedHomeFeeds: List<DetectedHomeFeed>,
-    sessionStats: SessionFilterStats,
+    detectedHomeFeedsFlow: StateFlow<List<DetectedHomeFeed>>,
+    sessionStatsFlow: StateFlow<SessionFilterStats>,
     pendingReload: Boolean,
     onSelectDefaultFeed: (String) -> Unit,
     onSelectThemeMode: (TwitterThemeMode) -> Unit,
@@ -76,22 +78,24 @@ fun TwitterModSettingsSheet(
     onClearCacheAndReload: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val detectedHomeFeeds by detectedHomeFeedsFlow.collectAsStateWithLifecycle()
+    val sessionStats by sessionStatsFlow.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val scrollState = rememberScrollState()
+    val listState = rememberLazyListState()
     var confirmReset by remember { mutableStateOf(false) }
 
-    val sheetScrollGuard = remember(scrollState) {
+    val sheetScrollGuard = remember(listState) {
         object : NestedScrollConnection {
             override fun onPostScroll(
                 consumed: Offset,
                 available: Offset,
                 source: NestedScrollSource
             ): Offset {
-                return if (available.y < 0f || scrollState.canScrollBackward) available else Offset.Zero
+                return if (available.y < 0f || listState.canScrollBackward) available else Offset.Zero
             }
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                return if (available.y < 0f || scrollState.canScrollBackward) available else Velocity.Zero
+                return if (available.y < 0f || listState.canScrollBackward) available else Velocity.Zero
             }
         }
     }
@@ -188,201 +192,201 @@ fun TwitterModSettingsSheet(
                 }
             }
 
-            Column(
+            LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .clipToBounds()
-                    .nestedScroll(sheetScrollGuard)
-                    .verticalScroll(scrollState, overscrollEffect = null)
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .nestedScroll(sheetScrollGuard),
+                contentPadding = PaddingValues(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                SettingsSectionCard(title = "Branding & Identity") {
-                    ModSwitchRow(
-                        title = "Classic Twitter Branding",
-                        subtitle = "Restore Larry the Bird, #1DA1F2 blue accents, and Tweet / Retweet labels.",
-                        checked = config.classicTwitterBranding,
-                        onCheckedChange = { checked -> onUpdate { it.copy(classicTwitterBranding = checked) } }
-                    )
-                    ThemeModeRow(
-                        selectedMode = config.themeMode,
-                        selectedAutoDarkVariant = config.autoDarkVariant,
-                        onSelect = onSelectThemeMode,
-                        onSelectAutoDarkVariant = onSelectAutoDarkVariant
-                    )
-                }
-
-                SettingsSectionCard(title = "Ads, Grok & Upsells") {
-                    ModSwitchRow(
-                        title = "Block All Ads",
-                        subtitle = "Remove promoted tweets at the GraphQL network layer with zero gaps.",
-                        checked = config.blockAds,
-                        onCheckedChange = { checked -> onUpdate { it.copy(blockAds = checked) } }
-                    )
-                    ModSwitchRow(
-                        title = "Remove All Grok",
-                        subtitle = "Strip Grok navigation tabs, tweet buttons, summaries, and drawers.",
-                        checked = config.removeGrok,
-                        onCheckedChange = { checked -> onUpdate { it.copy(removeGrok = checked) } }
-                    )
-                    ModSwitchRow(
-                        title = "Remove Subscribe & Premium",
-                        subtitle = "Strip Subscribe buttons, Get Verified banners, and Premium links.",
-                        checked = config.removePremiumUpsells,
-                        onCheckedChange = { checked -> onUpdate { it.copy(removePremiumUpsells = checked) } },
-                        showDivider = false
-                    )
-                }
-
-                SettingsSectionCard(title = "Header Feeds") {
-                    HomeFeedsSection(
-                        config = config,
-                        detectedFeeds = detectedHomeFeeds,
-                        onSelectDefaultFeed = onSelectDefaultFeed,
-                        onToggleStripSuggested = { checked -> onUpdate { it.copy(stripSuggestedHomeFeeds = checked) } },
-                        onToggleHideAddButton = { checked -> onUpdate { it.copy(hideAddFeedButton = checked) } },
-                        onToggleFeedVisibility = onToggleFeedVisibility,
-                        onMoveFeed = onMoveFeed
-                    )
-                }
-
-                SettingsSectionCard(title = "Timeline & Algorithm") {
-                    ModSwitchRow(
-                        title = "Strip Timeline Carousels",
-                        subtitle = "Remove Who to Follow, Topics, and Communities modules.",
-                        checked = config.stripTimelineCarousels,
-                        onCheckedChange = { checked -> onUpdate { it.copy(stripTimelineCarousels = checked) } }
-                    )
-                    ModSwitchRow(
-                        title = "Demote Paid Blue-Check Replies",
-                        subtitle = "Hide unfollowed paid-blue replies in tweet threads (keeps OP & followed).",
-                        checked = config.demoteBlueCheckReplies,
-                        onCheckedChange = { checked -> onUpdate { it.copy(demoteBlueCheckReplies = checked) } }
-                    )
-                    ModSwitchRow(
-                        title = "Prevent Auto-Refresh on Resume",
-                        subtitle = "Keep your scroll position when switching back from other apps.",
-                        checked = config.disableAutoRefreshOnResume,
-                        onCheckedChange = { checked -> onUpdate { it.copy(disableAutoRefreshOnResume = checked) } }
-                    )
-                    ModSwitchRow(
-                        title = "Hide Retweets",
-                        subtitle = "Filter reposted tweets out of your timeline.",
-                        checked = config.hideRetweets,
-                        onCheckedChange = { checked -> onUpdate { it.copy(hideRetweets = checked) } }
-                    )
-                    ModSwitchRow(
-                        title = "Hide Quote Tweets",
-                        subtitle = "Filter quote tweets out of your timeline.",
-                        checked = config.hideQuoteTweets,
-                        onCheckedChange = { checked -> onUpdate { it.copy(hideQuoteTweets = checked) } },
-                        showDivider = false
-                    )
-                }
-
-                SettingsSectionCard(title = "UI & Metric Cleanup") {
-                    ModSwitchRow(
-                        title = "Hide View Counts",
-                        subtitle = "Remove analytics view counts from tweet action bars.",
-                        checked = config.hideViewCounts,
-                        onCheckedChange = { checked -> onUpdate { it.copy(hideViewCounts = checked) } }
-                    )
-                    ModSwitchRow(
-                        title = "Hide Bookmark Counts",
-                        subtitle = "Hide bookmark counters for a cleaner 4-icon look.",
-                        checked = config.hideBookmarkCounts,
-                        onCheckedChange = { checked -> onUpdate { it.copy(hideBookmarkCounts = checked) } }
-                    )
-                    ModSwitchRow(
-                        title = "Clean 4-Tab Bottom Bar",
-                        subtitle = "Keep primary tabs while hiding Grok, Communities, Spaces, and Jobs.",
-                        checked = config.cleanBottomNav,
-                        onCheckedChange = { checked -> onUpdate { it.copy(cleanBottomNav = checked) } }
-                    )
-                    VerifiedBadgeModeRow(
-                        selectedMode = config.verifiedBadgeMode,
-                        onSelect = { mode -> onUpdate { it.copy(verifiedBadgeMode = mode) } }
-                    )
-                }
-
-                SettingsSectionCard(title = "Media & Link Enhancements") {
-                    ModSwitchRow(
-                        title = "1-Tap Media Downloader",
-                        subtitle = "Save highest-bitrate MP4s & full-res photos to Downloads/Twitter.",
-                        checked = config.enableVideoDownloader,
-                        onCheckedChange = { checked -> onUpdate { it.copy(enableVideoDownloader = checked) } }
-                    )
-                    ModSwitchRow(
-                        title = "Force Original Quality Images",
-                        subtitle = "Upgrade full-screen photo viewers to name=orig resolution.",
-                        checked = config.forceOrigQualityImages,
-                        onCheckedChange = { checked -> onUpdate { it.copy(forceOrigQualityImages = checked) } }
-                    )
-                    ModSwitchRow(
-                        title = "Unwrap t.co Tracking Links",
-                        subtitle = "Replace t.co redirects with clean destination URLs (long-press for options).",
-                        checked = config.unwrapTcoLinks,
-                        onCheckedChange = { checked -> onUpdate { it.copy(unwrapTcoLinks = checked) } }
-                    )
-                    ModSwitchRow(
-                        title = "Open Links in In-App Tab",
-                        subtitle = "Use Chrome Custom Tabs instead of switching to your external browser.",
-                        checked = config.openLinksInCustomTab,
-                        onCheckedChange = { checked -> onUpdate { it.copy(openLinksInCustomTab = checked) } }
-                    )
-                    ModSwitchRow(
-                        title = "Disable Video Autoplay",
-                        subtitle = "Pause timeline videos and GIFs until tapped.",
-                        checked = config.disableVideoAutoplay,
-                        onCheckedChange = { checked -> onUpdate { it.copy(disableVideoAutoplay = checked) } },
-                        showDivider = false
-                    )
-                }
-
-                SettingsSectionCard(title = "Muted Keywords, Domains & Regex (${config.mutedPatterns.size})") {
-                    MutePatternsSection(
-                        patterns = config.mutedPatterns,
-                        onAddPattern = onAddMutePattern,
-                        onRemovePattern = onRemoveMutePattern
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            onClearCacheAndReload()
-                            onDismiss()
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(AppIcons.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.size(6.dp))
-                        Text("Clear Cache")
-                    }
-                    FilledTonalButton(
-                        onClick = {
-                            onReloadTimeline()
-                            onDismiss()
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                item(key = "branding") {
+                    SettingsSectionCard(title = "Branding & Identity") {
+                        ModSwitchRow(
+                            title = "Classic Twitter Branding",
+                            subtitle = "Restore Larry the Bird, #1DA1F2 blue accents, and Tweet / Retweet labels.",
+                            checked = config.classicTwitterBranding,
+                            onCheckedChange = { checked -> onUpdate { it.copy(classicTwitterBranding = checked) } }
                         )
-                    ) {
-                        Icon(AppIcons.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.size(6.dp))
-                        Text("Reload Feed")
+                        ThemeModeRow(
+                            selectedMode = config.themeMode,
+                            selectedAutoDarkVariant = config.autoDarkVariant,
+                            onSelect = onSelectThemeMode,
+                            onSelectAutoDarkVariant = onSelectAutoDarkVariant
+                        )
                     }
                 }
-                ModSettingsFooter(sessionStats = sessionStats)
-                Spacer(modifier = Modifier.height(8.dp))
+                item(key = "ads") {
+                    SettingsSectionCard(title = "Ads, Grok & Upsells") {
+                        ModSwitchRow(
+                            title = "Block All Ads",
+                            subtitle = "Remove promoted tweets at the GraphQL network layer with zero gaps.",
+                            checked = config.blockAds,
+                            onCheckedChange = { checked -> onUpdate { it.copy(blockAds = checked) } }
+                        )
+                        ModSwitchRow(
+                            title = "Remove All Grok",
+                            subtitle = "Strip Grok navigation tabs, tweet buttons, summaries, and drawers.",
+                            checked = config.removeGrok,
+                            onCheckedChange = { checked -> onUpdate { it.copy(removeGrok = checked) } }
+                        )
+                        ModSwitchRow(
+                            title = "Remove Subscribe & Premium",
+                            subtitle = "Strip Subscribe buttons, Get Verified banners, and Premium links.",
+                            checked = config.removePremiumUpsells,
+                            onCheckedChange = { checked -> onUpdate { it.copy(removePremiumUpsells = checked) } },
+                            showDivider = false
+                        )
+                    }
+                }
+                item(key = "feeds") {
+                    SettingsSectionCard(title = "Header Feeds") {
+                        HomeFeedsSection(
+                            config = config,
+                            detectedFeeds = detectedHomeFeeds,
+                            onSelectDefaultFeed = onSelectDefaultFeed,
+                            onToggleStripSuggested = { checked -> onUpdate { it.copy(stripSuggestedHomeFeeds = checked) } },
+                            onToggleHideAddButton = { checked -> onUpdate { it.copy(hideAddFeedButton = checked) } },
+                            onToggleFeedVisibility = onToggleFeedVisibility,
+                            onMoveFeed = onMoveFeed
+                        )
+                    }
+                }
+                item(key = "timeline") {
+                    SettingsSectionCard(title = "Timeline & Algorithm") {
+                        ModSwitchRow(
+                            title = "Strip Timeline Carousels",
+                            subtitle = "Remove Who to Follow, Topics, and Communities modules.",
+                            checked = config.stripTimelineCarousels,
+                            onCheckedChange = { checked -> onUpdate { it.copy(stripTimelineCarousels = checked) } }
+                        )
+                        ModSwitchRow(
+                            title = "Demote Paid Blue-Check Replies",
+                            subtitle = "Hide unfollowed paid-blue replies in tweet threads (keeps OP & followed).",
+                            checked = config.demoteBlueCheckReplies,
+                            onCheckedChange = { checked -> onUpdate { it.copy(demoteBlueCheckReplies = checked) } }
+                        )
+                        ModSwitchRow(
+                            title = "Prevent Auto-Refresh on Resume",
+                            subtitle = "Keep your scroll position when switching back from other apps.",
+                            checked = config.disableAutoRefreshOnResume,
+                            onCheckedChange = { checked -> onUpdate { it.copy(disableAutoRefreshOnResume = checked) } }
+                        )
+                        ModSwitchRow(
+                            title = "Hide Retweets",
+                            subtitle = "Filter reposted tweets out of your timeline.",
+                            checked = config.hideRetweets,
+                            onCheckedChange = { checked -> onUpdate { it.copy(hideRetweets = checked) } }
+                        )
+                        ModSwitchRow(
+                            title = "Hide Quote Tweets",
+                            subtitle = "Filter quote tweets out of your timeline.",
+                            checked = config.hideQuoteTweets,
+                            onCheckedChange = { checked -> onUpdate { it.copy(hideQuoteTweets = checked) } },
+                            showDivider = false
+                        )
+                    }
+                }
+                item(key = "ui") {
+                    SettingsSectionCard(title = "UI & Metric Cleanup") {
+                        ModSwitchRow(
+                            title = "Hide View Counts",
+                            subtitle = "Remove analytics view counts from tweet action bars.",
+                            checked = config.hideViewCounts,
+                            onCheckedChange = { checked -> onUpdate { it.copy(hideViewCounts = checked) } }
+                        )
+                        ModSwitchRow(
+                            title = "Hide Bookmark Counts",
+                            subtitle = "Hide bookmark counters for a cleaner 4-icon look.",
+                            checked = config.hideBookmarkCounts,
+                            onCheckedChange = { checked -> onUpdate { it.copy(hideBookmarkCounts = checked) } }
+                        )
+                        ModSwitchRow(
+                            title = "Clean 4-Tab Bottom Bar",
+                            subtitle = "Keep primary tabs while hiding Grok, Communities, Spaces, and Jobs.",
+                            checked = config.cleanBottomNav,
+                            onCheckedChange = { checked -> onUpdate { it.copy(cleanBottomNav = checked) } }
+                        )
+                        VerifiedBadgeModeRow(
+                            selectedMode = config.verifiedBadgeMode,
+                            onSelect = { mode -> onUpdate { it.copy(verifiedBadgeMode = mode) } }
+                        )
+                    }
+                }
+                item(key = "media") {
+                    SettingsSectionCard(title = "Media & Link Enhancements") {
+                        ModSwitchRow(
+                            title = "1-Tap Media Downloader",
+                            subtitle = "Save highest-bitrate MP4s & full-res photos to Downloads/Twitter.",
+                            checked = config.enableVideoDownloader,
+                            onCheckedChange = { checked -> onUpdate { it.copy(enableVideoDownloader = checked) } }
+                        )
+                        ModSwitchRow(
+                            title = "Force Original Quality Images",
+                            subtitle = "Upgrade full-screen photo viewers to name=orig resolution.",
+                            checked = config.forceOrigQualityImages,
+                            onCheckedChange = { checked -> onUpdate { it.copy(forceOrigQualityImages = checked) } }
+                        )
+                        ModSwitchRow(
+                            title = "Unwrap t.co Tracking Links",
+                            subtitle = "Replace t.co redirects with clean destination URLs (long-press for options).",
+                            checked = config.unwrapTcoLinks,
+                            onCheckedChange = { checked -> onUpdate { it.copy(unwrapTcoLinks = checked) } }
+                        )
+                        ModSwitchRow(
+                            title = "Open Links in In-App Tab",
+                            subtitle = "Use Chrome Custom Tabs instead of switching to your external browser.",
+                            checked = config.openLinksInCustomTab,
+                            onCheckedChange = { checked -> onUpdate { it.copy(openLinksInCustomTab = checked) } }
+                        )
+                        ModSwitchRow(
+                            title = "Disable Video Autoplay",
+                            subtitle = "Pause timeline videos and GIFs until tapped.",
+                            checked = config.disableVideoAutoplay,
+                            onCheckedChange = { checked -> onUpdate { it.copy(disableVideoAutoplay = checked) } },
+                            showDivider = false
+                        )
+                    }
+                }
+                item(key = "mutes") {
+                    SettingsSectionCard(title = "Muted Keywords, Domains & Regex (${config.mutedPatterns.size})") {
+                        MutePatternsSection(
+                            patterns = config.mutedPatterns,
+                            onAddPattern = onAddMutePattern,
+                            onRemovePattern = onRemoveMutePattern
+                        )
+                    }
+                }
+                item(key = "actions") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { onClearCacheAndReload(); onDismiss() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(AppIcons.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.size(6.dp))
+                            Text("Clear Cache")
+                        }
+                        FilledTonalButton(
+                            onClick = { onReloadTimeline(); onDismiss() },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        ) {
+                            Icon(AppIcons.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.size(6.dp))
+                            Text("Reload Feed")
+                        }
+                    }
+                }
+                item(key = "footer") { ModSettingsFooter(sessionStats = sessionStats) }
             }
         }
     }

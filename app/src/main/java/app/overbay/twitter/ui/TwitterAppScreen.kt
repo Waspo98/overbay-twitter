@@ -49,6 +49,8 @@ import app.overbay.twitter.webview.FoldableLayoutPolicy
 import app.overbay.twitter.webview.TwitterWebController
 import app.overbay.twitter.webview.TwitterWebView
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -63,7 +65,6 @@ fun TwitterAppScreen(
     onFirstLoadComplete: () -> Unit
 ) {
     val config by repository.config.collectAsStateWithLifecycle()
-    val detectedHomeFeeds by repository.detectedHomeFeeds.collectAsStateWithLifecycle()
     val configJson = remember(config) { repository.toJsonString(config) }
     val controller = remember { TwitterWebController() }
     val context = LocalContext.current
@@ -114,7 +115,7 @@ fun TwitterAppScreen(
     var canGoBack by remember { mutableStateOf(false) }
     var customVideoView by remember { mutableStateOf<View?>(null) }
     var appliedGraphQlConfig by remember { mutableStateOf(config) }
-    var sessionStats by remember { mutableStateOf(SessionFilterStats()) }
+    val sessionStatsFlow = remember { MutableStateFlow(SessionFilterStats()) }
     var mainFrameError by remember { mutableStateOf<String?>(null) }
     var webViewEpoch by remember { mutableIntStateOf(0) }
     var preferDesktopUserAgent by remember { mutableStateOf(committedLayoutState.isExpanded) }
@@ -299,10 +300,12 @@ fun TwitterAppScreen(
                         applyThemeSelection(nextAutoVariant = TwitterDarkVariant.fromWireValue(rawVariant))
                     },
                     onStatsDelta = { adsDelta, clutterDelta ->
-                        sessionStats = SessionFilterStats(
-                            adsBlocked = sessionStats.adsBlocked + adsDelta,
-                            clutterBlocked = sessionStats.clutterBlocked + clutterDelta
-                        )
+                        sessionStatsFlow.update {
+                            SessionFilterStats(
+                                adsBlocked = it.adsBlocked + adsDelta,
+                                clutterBlocked = it.clutterBlocked + clutterDelta
+                            )
+                        }
                     },
                     onCanGoBackChange = { canGoBack = it },
                     onCustomViewChange = { v -> customVideoView = v },
@@ -350,8 +353,8 @@ fun TwitterAppScreen(
         if (showSettingsSheet) {
             TwitterModSettingsSheet(
                 config = config,
-                detectedHomeFeeds = detectedHomeFeeds,
-                sessionStats = sessionStats,
+                detectedHomeFeedsFlow = repository.detectedHomeFeeds,
+                sessionStatsFlow = sessionStatsFlow,
                 pendingReload = pendingReload,
                 onSelectDefaultFeed = repository::setDefaultHomeFeed,
                 onSelectThemeMode = { mode -> applyThemeSelection(nextMode = mode) },

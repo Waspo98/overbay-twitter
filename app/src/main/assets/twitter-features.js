@@ -11,6 +11,7 @@
     ]);
     const EXTERNAL_SKIP_RE = /^https?:\/\/([^/]+\.)?(x|twitter)\.com\//i;
     const HANDLE_FALLBACK_RE = /@([A-Za-z0-9_]{1,15})/;
+    const NON_PROFILE_PATH_RE = /^\/(home|explore|search|notifications|messages|compose|settings|i\/)(?:\/|$)/i;
     const PROFILE_LINK_SELECTOR = '[data-testid="UserDescription"] a[href^="http"], [data-testid="UserProfileHeader_Items"] a[href^="http"], [data-testid="UserUrl"] a[href^="http"]';
 
     let hasAppliedInitialDefault = false;
@@ -69,6 +70,11 @@
     }
 
     function markAddFeedButton(tablist) {
+        const sib = tablist.nextElementSibling;
+        const markSib = Boolean(
+            sib && !sib.hasAttribute("data-tw-add-feed-btn") && !sib.querySelector('[role="tab"]') &&
+            sib.querySelector("svg") && sib.getBoundingClientRect().width <= 84
+        );
         for (const el of tablist.querySelectorAll('a, button, [role="button"]')) {
             if (!el.closest('[role="tab"]') && !el.querySelector('[role="tab"]')) {
                 const target = el.closest('[role="tablist"] > *') || el;
@@ -78,10 +84,7 @@
                 }
             }
         }
-        const sib = tablist.nextElementSibling;
-        if (sib && !sib.hasAttribute("data-tw-add-feed-btn") && !sib.querySelector('[role="tab"]') && sib.querySelector("svg") && sib.getBoundingClientRect().width <= 84) {
-            sib.setAttribute("data-tw-add-feed-btn", "true");
-        }
+        if (markSib) sib.setAttribute("data-tw-add-feed-btn", "true");
     }
 
     function handleHomeTabs(cfg, tabsDirty) {
@@ -129,6 +132,7 @@
             window.TwitterBridge?.reportHomeFeeds?.(sig);
         }
 
+        markAddFeedButton(tablist);
         const sorted = [...entries].sort((a, b) => (order.get(a.key) ?? 1000 + a.domIdx) - (order.get(b.key) ?? 1000 + b.domIdx));
         sorted.forEach((e, idx) => {
             const ord = String(idx);
@@ -136,7 +140,6 @@
             if (e.visible) e.target.removeAttribute("data-tw-feed-hidden");
             else if (e.target.getAttribute("data-tw-feed-hidden") !== "true") e.target.setAttribute("data-tw-feed-hidden", "true");
         });
-        markAddFeedButton(tablist);
 
         const visible = sorted.filter((e) => e.visible);
         const activeVisible = visible.some((e) => e.tab.getAttribute("aria-selected") === "true");
@@ -246,19 +249,27 @@
                 existingBtn.remove();
             }
 
-            for (const a of article.querySelectorAll('a[href^="http"]')) {
+            for (const a of article.querySelectorAll('a[href^="http"]:not([data-tw-link-bound])')) {
                 processAnchor(a, cfg.unwrapTcoLinks !== false);
             }
             article.dataset.twEnhanced = "1";
         }
 
         if (cfg.verifiedBadgeMode === "HIDE_PAID_BLUE") {
-            for (const box of queryWithinRoots(roots, fullScan, '[data-testid="UserName"], [data-testid="UserCell"]')) {
-                checkVerifiedBadges(box, box);
+            const badgeRoots = fullScan ? null : roots.filter((r) => r.getAttribute?.("data-testid") !== "tweet" && !r.closest?.('article[data-testid="tweet"]'));
+            if (fullScan || badgeRoots.length > 0) {
+                for (const box of queryWithinRoots(badgeRoots, fullScan, '[data-testid="UserName"], [data-testid="UserCell"]')) {
+                    checkVerifiedBadges(box, box);
+                }
             }
         }
-        for (const a of queryWithinRoots(roots, fullScan, PROFILE_LINK_SELECTOR)) {
-            processAnchor(a, cfg.unwrapTcoLinks !== false);
+        if (!NON_PROFILE_PATH_RE.test(location.pathname)) {
+            const profileRoots = fullScan ? null : roots.filter((r) => r.getAttribute?.("data-testid") !== "cellInnerDiv" && !r.closest?.('article[data-testid="tweet"]'));
+            if (fullScan || profileRoots.length > 0) {
+                for (const a of queryWithinRoots(profileRoots, fullScan, PROFILE_LINK_SELECTOR)) {
+                    processAnchor(a, cfg.unwrapTcoLinks !== false);
+                }
+            }
         }
     }
 

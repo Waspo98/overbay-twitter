@@ -190,6 +190,10 @@ class TwitterConfigRepository(
             }
         }
 
+        fun warmUpPrefs(context: Context) {
+            context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        }
+
         internal val json = Json {
             ignoreUnknownKeys = true
             encodeDefaults = true
@@ -198,6 +202,7 @@ class TwitterConfigRepository(
         internal fun decodeConfigJson(raw: String): TwitterModConfig {
             return runCatching {
                 val parsed = json.decodeFromString<TwitterModConfig>(raw)
+                if (!raw.contains("hideForYouTab")) return@runCatching parsed
                 val obj = json.parseToJsonElement(raw) as? JsonObject ?: return@runCatching parsed
                 val legacyHideForYou = obj["hideForYouTab"]?.jsonPrimitive?.booleanOrNull == true
                 if (legacyHideForYou && "hiddenHomeFeeds" !in obj) {

@@ -97,6 +97,8 @@ class TwitterModConfigTest {
         assertTrue(TwitterRequestBlocker.shouldBlockTelemetryOrAd("https://analytics.twitter.com/i/adsct"))
         assertTrue(TwitterRequestBlocker.shouldBlockTelemetryOrAd("https://sub.ads-twitter.com:443/pixel"))
         assertTrue(TwitterRequestBlocker.shouldBlockTelemetryOrAd("https://x.com/i/api/1.1/jot/client_event.json"))
+        assertTrue(TwitterRequestBlocker.shouldBlockTelemetryOrAd("https://x.com/i/api/2/client_event.json"))
+        assertTrue(TwitterRequestBlocker.shouldBlockTelemetryOrAd("https://x.com/i/api/1.1/branch/init.json"))
         assertTrue(TwitterRequestBlocker.shouldBlockTelemetryOrAd("https://x.com/i/api/graphql/abc123/ClientEvent?variables={\"raw\":true}"))
         assertFalse(TwitterRequestBlocker.shouldBlockTelemetryOrAd("https://x.com/i/api/graphql/xyz/HomeLatestTimeline?query=ClientEvent"))
         assertFalse(TwitterRequestBlocker.shouldBlockTelemetryOrAd("https://pbs.twimg.com/media/Gabc123?format=jpg&name=orig"))

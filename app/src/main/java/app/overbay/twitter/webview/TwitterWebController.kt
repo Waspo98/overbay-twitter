@@ -288,7 +288,6 @@ class TwitterWebController {
         writes.forEach { (url, cookie) ->
             cookieManager.setCookie(url, cookie) {
                 if (remaining.decrementAndGet() == 0) {
-                    cookieManager.flush()
                     if (onCommitted != null) {
                         if (Looper.myLooper() == Looper.getMainLooper()) {
                             onCommitted()
@@ -296,6 +295,7 @@ class TwitterWebController {
                             mainHandler.post(onCommitted)
                         }
                     }
+                    cookieManager.flush()
                 }
             }
         }

@@ -7,10 +7,11 @@
     const userCache = new Map(), feedKindCache = new Map(), focalCache = new Map();
 
     const TRACKING_PARAMS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id", "fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "igsh", "_hsenc", "_hsmi", "vero_id", "mkt_tok"];
-    const SKIP_WALK_KEYS = new Set(["legacy", "entities", "extended_entities", "video_info", "sizes", "features", "professional", "affiliates_highlighted_label", "clientEventInfo", "feedbackInfo", "promotedMetadata", "unmention_data", "edit_control", "views", "quick_promote_eligibility"]);
+    const TRACKING_RE = /(?:^|[?&])(?:utm_|fbclid=|gclid=|dclid=|msclkid=|mc_|igsh|_hs|vero_id=|mkt_tok=)/i;
+    const SKIP_WALK_KEYS = new Set(["legacy", "entities", "extended_entities", "video_info", "sizes", "features", "professional", "affiliates_highlighted_label", "clientEventInfo", "feedbackInfo", "promotedMetadata", "unmention_data", "edit_control", "views", "quick_promote_eligibility", "card", "birdwatch_pivot", "ext", "mediaStats", "original_info", "additional_media_info", "ext_media_availability", "superFollowsReplyUserResult", "grok_analysis_button", "grok_share_attachment", "color", "palette", "focus_rects"]);
     const CAROUSEL_PREFIXES = ["who-to-follow-", "who-to-subscribe-", "communities-to-join-", "topics-to-follow-", "creator-subscriptions-", "inline-prompt-", "relevance-prompt-", "list-to-follow-", "connect-", "suggested-"];
-    const NON_TIMELINE_GQL_RE = /\/i\/api\/graphql\/[^/?]+\/(Favorite|Unfavorite|CreateBookmark|DeleteBookmark|CreateRetweet|DeleteRetweet|DataSaver|BadgeCount|PutClientEducationFlag|SubscribeTo|UnsubscribeFrom|ClientEvent|AccountBalance|ViewerSettings)/i;
-    const SKIP_API2_RE = /\/i\/api\/2\/(badge_count|live_pipeline|notifications\/view|dm\/|client_event|onboarding|keyregistry|fleets|hashflags)/i;
+    const NON_TIMELINE_GQL_RE = /\/i\/api\/graphql\/[^/?]+\/(Favorite|Unfavorite|CreateBookmark|DeleteBookmark|CreateRetweet|DeleteRetweet|CreateTweet|DeleteTweet|Follow|Unfollow|Mute|Unmute|Block|Unblock|PinTweet|UnpinTweet|MarkRead|UpdateProfile|DataSaver|BadgeCount|PutClientEducationFlag|SubscribeTo|UnsubscribeFrom|ClientEvent|AccountBalance|ViewerSettings|Grok|AudioSpace|Subscriptions|Premium|Sidebar|Typeahead|Hashflags)/i;
+    const SKIP_API2_RE = /\/i\/api\/2\/(badge_count|live_pipeline|notifications\/view|dm\/|client_event|onboarding|keyregistry|fleets|hashflags|grok\/)/i;
 
     function lruSet(map, key, value, max) {
         if (!key || value === undefined || value === null) return;
@@ -53,7 +54,7 @@
     }
 
     function cleanUrl(rawUrl) {
-        if (typeof rawUrl !== "string" || !rawUrl.includes("?")) return rawUrl;
+        if (typeof rawUrl !== "string" || !rawUrl.includes("?") || !TRACKING_RE.test(rawUrl)) return rawUrl;
         try {
             const u = new URL(rawUrl);
             let changed = false;
@@ -297,7 +298,7 @@
         if (node.__typename === "User" || (node.legacy?.screen_name && !node.legacy?.full_text && node.rest_id)) { indexUserNode(node); if (!hasTimeline) return; }
         if (Array.isArray(node.pinned_timelines)) indexPinnedTimelines(node.pinned_timelines);
         if (Array.isArray(node.instructions) && filterInstructionsList(node.instructions, url, cfg, mutes, state)) state.mutated = true;
-        for (const key of Object.keys(node)) {
+        for (const key in node) {
             if (key === "instructions" || key === "pinned_timelines" || SKIP_WALK_KEYS.has(key)) continue;
             const val = node[key];
             if (val && typeof val === "object") walkAndProcess(val, url, cfg, mutes, state, depth + 1);
@@ -316,13 +317,31 @@
         return { obj, mutated: state.mutated };
     }
 
-    function processPayloadText(url, text) {
-        if (!text || typeof text !== "string") return { text, mutated: false };
+    function parseAndProcessPayload(url, text) {
+        if (!text || typeof text !== "string") return { parsed: null, mutated: false };
         const c = text.charCodeAt(0), trimmed = (c === 123 || c === 91) ? text : text.trim();
-        if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return { text, mutated: false };
+        if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return { parsed: null, mutated: false };
         const parsed = JSON.parse(trimmed);
-        const { mutated } = processPayloadObject(url, parsed);
-        return { text: mutated ? JSON.stringify(parsed) : text, mutated };
+        return { parsed, mutated: processPayloadObject(url, parsed).mutated };
+    }
+
+    function createLazyJsonResponse(response, reqUrl, rawText, parsed, mutated) {
+        let used = false, cachedText = mutated ? null : rawText, cachedBody = null;
+        const headers = new Headers(response.headers);
+        if (mutated) { headers.delete("content-length"); headers.delete("content-encoding"); }
+        const init = { status: response.status, statusText: response.statusText, headers };
+        const out = new Response(null, init), url = response.url || reqUrl || "";
+        const getText = () => (cachedText === null ? (cachedText = JSON.stringify(parsed)) : cachedText);
+        const read = (fn) => used ? Promise.reject(new TypeError("Body has already been consumed")) : ((used = true), Promise.resolve(fn()));
+        Object.defineProperties(out, {
+            url: { value: url }, bodyUsed: { get: () => used }, body: { get: () => (cachedBody || (cachedBody = new Response(getText(), init).body)) },
+            json: { value: () => read(() => parsed) }, text: { value: () => read(getText) },
+            arrayBuffer: { value: () => read(() => new TextEncoder().encode(getText()).buffer) },
+            bytes: { value: () => read(() => new TextEncoder().encode(getText())) },
+            blob: { value: () => read(() => new Blob([getText()], { type: headers.get("content-type") || "application/json" })) },
+            clone: { value: () => { if (used) throw new TypeError("Body has already been consumed"); const c = new Response(getText(), init); if (url) try { Object.defineProperty(c, "url", { value: url }); } catch (_) {} return c; } }
+        });
+        return out;
     }
 
     const origFetch = window.fetch;
@@ -336,18 +355,14 @@
                 const ct = response.headers.get("content-type") || "";
                 if (!ct.includes("json") && !reqUrl.includes("/graphql/")) return response;
                 rawText = await response.text();
-                const { text: outBody } = processPayloadText(reqUrl, rawText);
-                const headers = new Headers(response.headers);
-                headers.delete("content-length");
-                headers.delete("content-encoding");
-                const out = new Response(outBody, { status: response.status, statusText: response.statusText, headers });
+                const { parsed, mutated } = parseAndProcessPayload(reqUrl, rawText);
+                if (parsed !== null) return createLazyJsonResponse(response, reqUrl, rawText, parsed, mutated);
+                const out = new Response(rawText, { status: response.status, statusText: response.statusText, headers: response.headers });
                 if (response.url || reqUrl) try { Object.defineProperty(out, "url", { value: response.url || reqUrl }); } catch (_) {}
                 return out;
             } catch (_) {
                 const isNullBody = response.status === 204 || response.status === 205 || response.status === 304;
-                return rawText !== null
-                    ? new Response(isNullBody ? null : rawText, { status: response.status, statusText: response.statusText, headers: response.headers })
-                    : response;
+                return rawText !== null ? new Response(isNullBody ? null : rawText, { status: response.status, statusText: response.statusText, headers: response.headers }) : response;
             }
         };
     }
@@ -363,8 +378,11 @@
     const shouldFilterXhr = (xhr) => xhr.readyState === 4 && isTargetApiUrl(xhr.__twUrl) && xhr.status >= 200 && xhr.status < 300;
     function getFilteredXhrText(xhr, raw) {
         if (xhr.__twCachedKey === xhr.__twUrl && xhr.__twCachedText !== undefined) return xhr.__twCachedText;
-        try { const { text } = processPayloadText(xhr.__twUrl, raw); xhr.__twCachedKey = xhr.__twUrl; return (xhr.__twCachedText = text); }
-        catch (_) { return raw; }
+        try {
+            const { parsed, mutated } = parseAndProcessPayload(xhr.__twUrl, raw);
+            xhr.__twCachedKey = xhr.__twUrl;
+            return (xhr.__twCachedText = (parsed !== null && mutated ? JSON.stringify(parsed) : raw));
+        } catch (_) { return raw; }
     }
 
     if (descResponseText?.get) {

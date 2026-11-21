@@ -107,8 +107,16 @@ class TwitterWebEngineTest {
         assertFalse(TwitterRequestBlocker.isAllowedOriginUrl(null))
 
         assertTrue(TwitterRequestBlocker.isJsonTelemetryUrl("https://x.com/i/api/1.1/jot/client_event.json"))
+        assertTrue(TwitterRequestBlocker.isJsonTelemetryUrl("https://x.com/i/api/2/client_event.json"))
         assertTrue(TwitterRequestBlocker.isJsonTelemetryUrl("https://x.com/i/api/graphql/abc/ClientEvent"))
         assertFalse(TwitterRequestBlocker.isJsonTelemetryUrl("https://analytics.twitter.com/i/adsct"))
+
+        assertTrue(TwitterRequestBlocker.shouldBlockGrokApi("https://x.com/i/api/graphql/abc123/GrokHome?variables={}"))
+        assertTrue(TwitterRequestBlocker.shouldBlockGrokApi("https://x.com/i/api/graphql/xyz/GrokAnalyzePost"))
+        assertTrue(TwitterRequestBlocker.shouldBlockGrokApi("https://x.com/i/api/2/grok/add_response.json"))
+        assertFalse(TwitterRequestBlocker.shouldBlockGrokApi("https://x.com/i/api/graphql/xyz/SearchTimeline?variables=%7B%22rawQuery%22%3A%22grok%22%7D"))
+        assertFalse(TwitterRequestBlocker.shouldBlockGrokApi("https://x.com/i/api/graphql/xyz/HomeTimeline"))
+        assertFalse(TwitterRequestBlocker.shouldBlockGrokApi("https://example.com/i/api/graphql/xyz/GrokHome"))
     }
 
     @Test
@@ -244,6 +252,7 @@ class TwitterWebEngineTest {
         assertTrue(interceptor.contains("reportStatsDelta"))
         assertTrue(interceptor.contains("url.includes(\"Bookmarks\")"))
         assertTrue(interceptor.contains("raw.includes(\"video_info\")"))
+        assertTrue(interceptor.contains("createLazyJsonResponse"))
         assertFalse(interceptor.contains("videoListCache"))
         assertFalse(interceptor.contains("__TW_STATS__"))
 
@@ -251,6 +260,7 @@ class TwitterWebEngineTest {
         assertTrue(theme.contains("prefers-color-scheme"))
         assertTrue(theme.contains("__twNotifyColorSchemeChange"))
         assertTrue(theme.contains("syncSurfaceStyleSheet"))
+        assertTrue(theme.contains("scannedCounts"))
         assertTrue(theme.contains("syncDrawerThemeBars"))
         assertTrue(theme.contains("setThemeMode"))
         assertTrue(theme.contains("setAutoDarkVariant"))
@@ -273,8 +283,10 @@ class TwitterWebEngineTest {
         // DOM engine contracts
         assertTrue(dom.contains("[role='menuitem'] span"))
         assertTrue(dom.contains("Math.hypot"))
-        assertTrue(dom.contains("delete svg.dataset.twLogoChecked"))
+        assertTrue(dom.contains("checkedLogoSvgs = new WeakSet()"))
+        assertTrue(dom.contains("tw-mod-preconnect"))
         assertTrue(dom.contains("twSurfaceOverride"))
+        assertFalse(dom.contains("twLogoChecked"))
         assertFalse(dom.contains("openSettingsWithHaptic?.() ??"))
         assertFalse(dom.contains("__TWITTER_IS_UNFOLDED__"))
         assertFalse(dom.contains("twForceBottomNav"))

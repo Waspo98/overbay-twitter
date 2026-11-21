@@ -33,6 +33,8 @@ object TwitterRequestBlocker {
     private val blockedPathFragments = arrayOf(
         "/i/api/1.1/jot/",
         "/1.1/jot/",
+        "/i/api/2/client_event",
+        "/i/api/1.1/branch/",
         "/i/adsct",
         "/ClientEvent"
     )
@@ -199,8 +201,53 @@ object TwitterRequestBlocker {
             blockedHosts.none { regionMatchesDomain(origin, hostStart, hostEnd, it) }
     }
 
+    fun shouldBlockGrokApi(urlString: String): Boolean {
+        val schemeSep = urlString.indexOf("://")
+        if (schemeSep <= 0) return false
+        val hostStart = schemeSep + 3
+        val len = urlString.length
+        if (hostStart >= len) return false
+
+        var pathStart = len
+        var pathEnd = len
+        for (i in hostStart until len) {
+            val ch = urlString[i]
+            if (ch == '/' && pathStart == len) {
+                pathStart = i
+            } else if (ch == '?' || ch == '#') {
+                pathEnd = i
+                if (pathStart == len) pathStart = i
+                break
+            }
+        }
+        var hostEnd = pathStart
+        for (i in hostStart until pathStart) {
+            if (urlString[i] == ':') {
+                hostEnd = i
+                break
+            }
+        }
+        if (hostEnd <= hostStart || pathEnd - pathStart < 12) return false
+        var isInternal = false
+        for (h in internalHosts) {
+            if (regionMatchesDomain(urlString, hostStart, hostEnd, h)) {
+                isInternal = true
+                break
+            }
+        }
+        if (!isInternal) return false
+
+        if (urlString.regionMatches(pathStart, "/i/api/2/grok/", 0, 14, ignoreCase = true)) return true
+        val gqlPrefix = "/i/api/graphql/"
+        if (!urlString.regionMatches(pathStart, gqlPrefix, 0, gqlPrefix.length, ignoreCase = true)) return false
+        val opSlash = urlString.indexOf('/', startIndex = pathStart + gqlPrefix.length)
+        if (opSlash < 0 || opSlash + 5 > pathEnd) return false
+        return urlString.regionMatches(opSlash + 1, "Grok", 0, 4, ignoreCase = true)
+    }
+
     fun isJsonTelemetryUrl(urlString: String): Boolean {
         return urlString.contains("/jot/", ignoreCase = true) ||
+            urlString.contains("/client_event", ignoreCase = true) ||
             urlString.contains("/ClientEvent", ignoreCase = true)
     }
 

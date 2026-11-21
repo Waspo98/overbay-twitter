@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.SystemClock
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.MimeTypeMap
@@ -39,6 +40,8 @@ internal class TwitterWebViewClient(
     private val onMainFrameError: (String?) -> Unit,
     private val onRendererCrash: () -> Unit
 ) : WebViewClient() {
+
+    private var lastCookieFlushElapsedMs = 0L
 
     override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
@@ -78,7 +81,12 @@ internal class TwitterWebViewClient(
         super.onPageFinished(view, url)
         onClearOneShotRestoreScript()
         controller.swipeRefresh?.isRefreshing = false
-        CookieManager.getInstance().flush()
+        val now = SystemClock.elapsedRealtime()
+        val isAuthRoute = url?.contains("/i/flow/login", ignoreCase = true) == true
+        if (lastCookieFlushElapsedMs == 0L || isAuthRoute || now - lastCookieFlushElapsedMs >= 15_000L) {
+            lastCookieFlushElapsedMs = now
+            CookieManager.getInstance().flush()
+        }
         onCanGoBackChange(view.canGoBack())
         onFirstLoadComplete()
     }
@@ -112,15 +120,18 @@ internal class TwitterWebViewClient(
         view: WebView,
         request: WebResourceRequest
     ): WebResourceResponse? {
-        if (!configRef.get().blockAds) return super.shouldInterceptRequest(view, request)
+        val cfg = configRef.get()
+        if (!cfg.blockAds && !cfg.removeGrok) return super.shouldInterceptRequest(view, request)
         val urlString = request.url.toString()
-        if (TwitterRequestBlocker.shouldBlockTelemetryOrAd(urlString)) {
+        val blockTelemetry = cfg.blockAds && TwitterRequestBlocker.shouldBlockTelemetryOrAd(urlString)
+        val blockGrok = !blockTelemetry && cfg.removeGrok && TwitterRequestBlocker.shouldBlockGrokApi(urlString)
+        if (blockTelemetry || blockGrok) {
             val origin = request.requestHeaders?.entries
                 ?.firstOrNull { it.key.equals("Origin", ignoreCase = true) }
                 ?.value
             return TwitterRequestBlocker.emptyJsonResponse(
                 origin = origin,
-                isJsonEndpoint = TwitterRequestBlocker.isJsonTelemetryUrl(urlString)
+                isJsonEndpoint = blockGrok || TwitterRequestBlocker.isJsonTelemetryUrl(urlString)
             )
         }
         return super.shouldInterceptRequest(view, request)

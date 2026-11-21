@@ -72,7 +72,11 @@
         };
     }
 
-    let lastSurfaceSheetSig = "";
+    let activeSurfaceMode = "";
+    let scannedCounts = new WeakMap();
+    let hasMatchedSurfaceRules = false;
+    let lastSurfaceScanAt = 0;
+    let surfaceIdleHandle = 0;
 
     function classifyColorToken(raw, mode) {
         if (!raw) return null;
@@ -96,19 +100,15 @@
         return null;
     }
 
-    function syncSurfaceStyleSheet(overrideMode) {
-        if (overrideMode !== "dim" && overrideMode !== "black") return;
+    function runSurfaceScan(overrideMode, reset) {
         const mount = document.head || document.documentElement;
         if (!mount) return;
-        const sheets = document.styleSheets;
-        let rnLen = 0;
-        for (const s of sheets) {
-            if (s.ownerNode?.dataset?.twOwn) continue;
-            try { rnLen += s.cssRules.length; } catch (_) { rnLen += 1; }
+        lastSurfaceScanAt = Date.now();
+        if (reset) {
+            activeSurfaceMode = overrideMode;
+            scannedCounts = new WeakMap();
+            hasMatchedSurfaceRules = false;
         }
-        const sig = `${overrideMode}:${sheets.length}:${rnLen}`;
-        if (sig === lastSurfaceSheetSig) return;
-        lastSurfaceSheetSig = sig;
         const prefix = `html[data-tw-surface-override="${overrideMode}"]`;
         const buckets = { base: [], glass: [], elev: [], hover: [], border: [] };
         const pushSel = (bucket, selText) => {
@@ -118,32 +118,40 @@
                 buckets[bucket].push(/^(html|:root)\b/i.test(s) ? prefix : `${prefix} ${s}`);
             }
         };
-        for (const sheet of sheets) {
+        let hasNew = false;
+        for (const sheet of document.styleSheets) {
             if (sheet.ownerNode?.dataset?.twOwn) continue;
             let rules;
             try { rules = sheet.cssRules; } catch (_) { continue; }
-            for (const rule of rules) {
+            const prev = reset ? 0 : (scannedCounts.get(sheet) || 0);
+            if (rules.length <= prev) continue;
+            scannedCounts.set(sheet, rules.length);
+            for (let i = prev; i < rules.length; i++) {
+                const rule = rules[i];
                 if (rule.type !== 1 || !rule.selectorText || !rule.style) continue;
                 const bgTok = classifyColorToken(rule.style.backgroundColor, overrideMode);
-                if (bgTok && bgTok !== "border") pushSel(bgTok, rule.selectorText);
+                if (bgTok && bgTok !== "border") { pushSel(bgTok, rule.selectorText); hasNew = true; }
                 for (const prop of ["borderColor", "borderTopColor", "borderBottomColor", "borderLeftColor", "borderRightColor"]) {
                     if (classifyColorToken(rule.style[prop], overrideMode) === "border") {
                         pushSel("border", rule.selectorText);
+                        hasNew = true;
                         break;
                     }
                 }
             }
         }
+        if (!reset && !hasNew) return;
         const pal = overrideMode === "dim"
             ? { base: "#15202B", glass: "rgba(21, 32, 43, 0.78)", elev: "#1E2732", hover: "#273340", border: "#38444D" }
             : { base: "#000000", glass: "rgba(0, 0, 0, 0.65)", elev: "#16181C", hover: "#202327", border: "#2F3336" };
-        const css = [
+        const newRules = [
             buckets.base.length ? `${buckets.base.join(",")} { background-color: ${pal.base} !important; }` : "",
             buckets.glass.length ? `${buckets.glass.join(",")} { background-color: ${pal.glass} !important; }` : "",
             buckets.elev.length ? `${buckets.elev.join(",")} { background-color: ${pal.elev} !important; }` : "",
             buckets.hover.length ? `${buckets.hover.join(",")} { background-color: ${pal.hover} !important; }` : "",
             buckets.border.length ? `${buckets.border.join(",")} { border-color: ${pal.border} !important; }` : ""
-        ].filter(Boolean).join("\n");
+        ].filter(Boolean);
+        if (newRules.length > 0) hasMatchedSurfaceRules = true;
         let styleEl = document.getElementById("tw-mod-surface-style");
         if (!styleEl) {
             styleEl = document.createElement("style");
@@ -151,7 +159,44 @@
             styleEl.dataset.twOwn = "1";
             mount.appendChild(styleEl);
         }
-        if (styleEl.textContent !== css) styleEl.textContent = css;
+        if (reset) {
+            const css = newRules.join("\n");
+            if (styleEl.textContent !== css) styleEl.textContent = css;
+        } else {
+            const targetSheet = styleEl.sheet;
+            for (const ruleCss of newRules) {
+                if (targetSheet) {
+                    try { targetSheet.insertRule(ruleCss, targetSheet.cssRules.length); continue; } catch (_) {}
+                }
+                styleEl.appendChild(document.createTextNode("\n" + ruleCss));
+            }
+        }
+    }
+
+    function syncSurfaceStyleSheet(overrideMode, force = false) {
+        if (overrideMode !== "dim" && overrideMode !== "black") return;
+        const modeChanged = overrideMode !== activeSurfaceMode;
+        if (force || modeChanged || !hasMatchedSurfaceRules) {
+            if (surfaceIdleHandle) { clearTimeout(surfaceIdleHandle); surfaceIdleHandle = 0; }
+            runSurfaceScan(overrideMode, modeChanged);
+            return;
+        }
+        if (surfaceIdleHandle) return;
+        const waitMs = Math.max(0, 400 - (Date.now() - lastSurfaceScanAt));
+        const scheduleIdle = () => {
+            surfaceIdleHandle = 0;
+            if (document.documentElement?.dataset?.twSurfaceOverride !== overrideMode) return;
+            if (typeof window.requestIdleCallback === "function") {
+                window.requestIdleCallback(() => {
+                    if (document.documentElement?.dataset?.twSurfaceOverride === overrideMode) {
+                        runSurfaceScan(overrideMode, false);
+                    }
+                }, { timeout: 250 });
+            } else {
+                runSurfaceScan(overrideMode, false);
+            }
+        };
+        surfaceIdleHandle = setTimeout(scheduleIdle, waitMs);
     }
 
     const THEME_MODES = [{ id: "AUTO", label: "Auto" }, { id: "LIGHT", label: "Light" }, { id: "DIM", label: "Dim" }, { id: "LIGHTS_OUT", label: "Lights Out" }];
@@ -165,12 +210,14 @@
         for (const btn of wrap.querySelectorAll("[data-tw-dark-variant]")) btn.setAttribute("aria-pressed", btn.dataset.twDarkVariant === variant ? "true" : "false");
     }
 
-    function syncWrapInk(wrap, link) {
+    function syncWrapInk(wrap, link, inkKey) {
+        if (inkKey && wrap.dataset.twInkKey === inkKey) return;
         const span = link?.querySelector("span");
         if (!span) return;
         const cs = getComputedStyle(span);
         if (cs.color) wrap.style.color = cs.color;
         if (cs.fontFamily) wrap.style.fontFamily = cs.fontFamily;
+        if (inkKey) wrap.dataset.twInkKey = inkKey;
     }
 
     function findDrawerTopColumn(drawerRoot, settingsLink) {
@@ -193,9 +240,10 @@
 
     function syncDrawerThemeBars(cfg) {
         const mode = String(cfg?.themeMode || "AUTO").toUpperCase(), variant = String(cfg?.autoDarkVariant || "LIGHTS_OUT").toUpperCase();
+        const inkKey = `${mode}|${variant}|${document.documentElement?.dataset?.twSurfaceOverride || ""}`;
         for (const wrap of document.querySelectorAll('[data-tw-theme-bar="true"]')) {
             updateThemeBarSelection(wrap, mode, variant);
-            syncWrapInk(wrap, wrap.closest('[data-testid="Drawer"], [role="dialog"]')?.querySelector('a[href="/settings"], a[href="/settings/account"]'));
+            syncWrapInk(wrap, wrap.closest('[data-testid="Drawer"], [role="dialog"]')?.querySelector('a[href="/settings"], a[href="/settings/account"]'), inkKey);
         }
         for (const link of document.querySelectorAll('a[href="/settings"], a[href="/settings/account"]')) {
             if (link.closest('[data-testid="primaryColumn"]')) continue;
@@ -207,7 +255,7 @@
             wrap.className = "tw-mod-theme-wrap";
             wrap.dataset.twOwn = "1";
             wrap.setAttribute("data-tw-theme-bar", "true");
-            syncWrapInk(wrap, link);
+            syncWrapInk(wrap, link, inkKey);
             const bar = document.createElement("div");
             bar.className = "tw-mod-theme-bar";
             bar.setAttribute("role", "group");

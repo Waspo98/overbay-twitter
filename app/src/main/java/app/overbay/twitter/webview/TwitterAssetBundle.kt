@@ -1,6 +1,7 @@
 package app.overbay.twitter.webview
 
 import android.content.Context
+import java.util.concurrent.Executor
 import org.json.JSONObject
 
 /**
@@ -67,6 +68,12 @@ class TwitterAssetBundle private constructor(
             return cached ?: synchronized(this) {
                 cached ?: loadFromAssets(context.applicationContext).also { cached = it }
             }
+        }
+
+        fun preloadAsync(context: Context, executor: Executor) {
+            if (cached != null) return
+            val appContext = context.applicationContext
+            executor.execute { runCatching { getInstance(appContext) } }
         }
 
         private fun loadFromAssets(context: Context): TwitterAssetBundle {

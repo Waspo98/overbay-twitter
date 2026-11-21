@@ -21,7 +21,8 @@
 
     let lastKnownPath = "", lastDialogOpen = null, lastDatasetSig = "", lastReportedThemeHex = "";
     let fullScanPending = true, themeDirty = true, tabsDirty = true, headerDirty = true, dialogDirty = true;
-    let htmlObserved = false, bodyObserved = false;
+    let htmlObserved = false, bodyObserved = false, nativeDarkIsDim = false;
+    let checkedLogoSvgs = new WeakSet();
     const dirtyRoots = new Set();
 
     const getCfg = () => window.__TWITTER_CONFIG__ || {};
@@ -29,12 +30,24 @@
 
     function ensureStyleTag() {
         const cssText = window.__TWITTER_CLEAN_CSS__, mount = document.head || document.documentElement;
-        if (!cssText || !mount || document.getElementById("tw-mod-style")) return;
-        const styleEl = document.createElement("style");
-        styleEl.id = "tw-mod-style";
-        styleEl.dataset.twOwn = "1";
-        styleEl.textContent = cssText;
-        mount.appendChild(styleEl);
+        if (cssText && mount && !document.getElementById("tw-mod-style")) {
+            const styleEl = document.createElement("style");
+            styleEl.id = "tw-mod-style";
+            styleEl.dataset.twOwn = "1";
+            styleEl.textContent = cssText;
+            mount.appendChild(styleEl);
+        }
+        if (document.head && !document.getElementById("tw-mod-preconnect")) {
+            for (const [id, href] of [["tw-mod-preconnect", "https://abs.twimg.com"], ["tw-mod-preconnect-pbs", "https://pbs.twimg.com"]]) {
+                const link = document.createElement("link");
+                link.id = id;
+                link.rel = "preconnect";
+                link.href = href;
+                link.crossOrigin = "anonymous";
+                link.dataset.twOwn = "1";
+                document.head.appendChild(link);
+            }
+        }
     }
 
     function rgbToHex(rgb) {
@@ -44,7 +57,7 @@
         return `#${h(m[1])}${h(m[2])}${h(m[3])}`.toUpperCase();
     }
 
-    function syncDatasetAndTheme(cfg) {
+    function syncDatasetAndTheme(cfg, forceSurfaceSync = false) {
         const root = document.documentElement;
         if (!root) return;
         if (!htmlObserved) { htmlObserved = true; themeObserver.observe(root, { attributes: true, attributeFilter: ["style", "class"] }); }
@@ -52,14 +65,17 @@
         const mode = String(cfg.themeMode || "AUTO").toUpperCase();
         const darkVariant = String(cfg.autoDarkVariant || "LIGHTS_OUT").toUpperCase();
         const wantDark = mode === "DIM" || mode === "LIGHTS_OUT" || (mode === "AUTO" && Boolean(window.__TWITTER_SYSTEM_DARK__));
-        const surfaceOverride = !wantDark ? "" : ((mode === "DIM" || (mode === "AUTO" && darkVariant === "DIM")) ? "dim" : "black");
+        const wantDim = wantDark && (mode === "DIM" || (mode === "AUTO" && darkVariant === "DIM"));
+        let surfaceOverride = !wantDark ? "" : (wantDim ? "dim" : (nativeDarkIsDim ? "black" : ""));
         const sig = [
             cfg.classicTwitterBranding !== false, cfg.removeGrok !== false, cfg.removePremiumUpsells !== false,
             Boolean(cfg.hideAddFeedButton), cfg.hideViewCounts !== false, Boolean(cfg.hideBookmarkCounts),
             cfg.cleanBottomNav !== false, cfg.verifiedBadgeMode || "SHOW_ALL", surfaceOverride
         ].join("|");
 
+        let sigChanged = false;
         if (sig !== lastDatasetSig) {
+            sigChanged = true;
             lastDatasetSig = sig;
             Object.assign(root.dataset, {
                 twClassicBrand: String(cfg.classicTwitterBranding !== false), twRemoveGrok: String(cfg.removeGrok !== false),
@@ -70,9 +86,19 @@
             });
             themeDirty = true;
         }
-        window.__TW_THEME__?.syncSurfaceStyleSheet?.(surfaceOverride);
+        if (surfaceOverride) {
+            window.__TW_THEME__?.syncSurfaceStyleSheet?.(surfaceOverride, forceSurfaceSync || sigChanged);
+        }
         if (themeDirty && document.body) {
-            const hex = rgbToHex(getComputedStyle(document.body).backgroundColor);
+            let hex = rgbToHex(getComputedStyle(document.body).backgroundColor);
+            if (hex === "#15202B" && wantDark && !wantDim && !nativeDarkIsDim) {
+                nativeDarkIsDim = true;
+                surfaceOverride = "black";
+                root.dataset.twSurfaceOverride = "black";
+                lastDatasetSig = "";
+                window.__TW_THEME__?.syncSurfaceStyleSheet?.("black", true);
+                hex = rgbToHex(getComputedStyle(document.body).backgroundColor) || "#000000";
+            }
             if (hex) {
                 themeDirty = false;
                 if (hex !== lastReportedThemeHex) {
@@ -90,7 +116,7 @@
         window.__TWITTER_CONFIG__ = cfg;
         window.__twNotifyColorSchemeChange?.();
         fullScanPending = themeDirty = tabsDirty = headerDirty = dialogDirty = true;
-        syncDatasetAndTheme(cfg);
+        syncDatasetAndTheme(cfg, true);
         runDomPass();
     };
 
@@ -123,14 +149,20 @@
                     }
                 }
             }
-            for (const svg of queryWithinRoots(roots, fullScan, "svg:not([data-tw-logo-checked])")) {
-                svg.dataset.twLogoChecked = "1";
-                const path = svg.querySelector("path");
-                if (!path) continue;
-                const currentD = path.getAttribute("d") || "";
-                if (isXLogoPath(currentD)) swapSvgToBird(svg, path, currentD);
+            const logoRoots = fullScan ? null : roots.filter((r) => r.getAttribute?.("data-testid") !== "cellInnerDiv" && !r.closest?.('article[data-testid="tweet"]'));
+            if (fullScan || logoRoots.length > 0) {
+                for (const svg of queryWithinRoots(logoRoots, fullScan, "svg")) {
+                    if (checkedLogoSvgs.has(svg)) continue;
+                    checkedLogoSvgs.add(svg);
+                    if (fullScan && svg.closest('article[data-testid="tweet"]')) continue;
+                    const path = svg.querySelector("path");
+                    if (!path) continue;
+                    const currentD = path.getAttribute("d") || "";
+                    if (isXLogoPath(currentD)) swapSvgToBird(svg, path, currentD);
+                }
             }
         } else {
+            checkedLogoSvgs = new WeakSet();
             for (const svg of document.querySelectorAll("svg[data-tw-bird='true']")) {
                 const path = svg.querySelector("path");
                 if (path && path.dataset.twSwapped === "true" && path.dataset.twOrigD) {
@@ -138,7 +170,6 @@
                     path.dataset.twOrigFill ? path.setAttribute("fill", path.dataset.twOrigFill) : path.removeAttribute("fill");
                     if (svg.dataset.twOrigViewbox) svg.setAttribute("viewBox", svg.dataset.twOrigViewbox);
                     delete svg.dataset.twBird;
-                    delete svg.dataset.twLogoChecked;
                     delete path.dataset.twSwapped;
                 }
             }
@@ -171,9 +202,18 @@
             }
             if (el.childNodes.length === 1 && el.firstChild.nodeType === Node.TEXT_NODE) {
                 const txt = el.firstChild.nodeValue;
-                const trimmed = txt ? txt.trim() : "";
+                if (!txt) continue;
                 if (useClassic) {
-                    const mapped = trimmed ? mapUiText(trimmed) : null;
+                    if (txt.length > 32) {
+                        if (el.dataset.twReplacedTo && txt !== el.dataset.twReplacedTo) {
+                            delete el.dataset.twReplacedTo;
+                            origTextMap.delete(el);
+                        }
+                        continue;
+                    }
+                    const trimmed = (txt.charCodeAt(0) <= 32 || txt.charCodeAt(txt.length - 1) <= 32) ? txt.trim() : txt;
+                    const first = trimmed ? trimmed.charCodeAt(0) : 0;
+                    const mapped = first >= 65 ? mapUiText(trimmed) : null;
                     if (mapped && !el.closest(TERM_SKIP_ANCESTORS)) {
                         const nextVal = txt.replace(trimmed, mapped);
                         origTextMap.set(el, txt);
@@ -297,7 +337,7 @@
         dirtyRoots.clear();
 
         ensureStyleTag();
-        syncDatasetAndTheme(cfg);
+        syncDatasetAndTheme(cfg, fullScan);
         updateBrandLogos(cfg.classicTwitterBranding !== false, roots, fullScan, checkHeader);
         rewriteUiTerminology(cfg.classicTwitterBranding !== false, roots, fullScan);
         if (checkHeader) {
@@ -342,26 +382,37 @@
 
     const observer = new MutationObserver((records) => {
         let relevant = false;
+        const onHome = location.pathname.startsWith("/home");
         for (const rec of records) {
+            const targetEl = rec.target && rec.target.nodeType === Node.ELEMENT_NODE ? rec.target : null;
             if (rec.removedNodes.length > 0) {
                 if (lastDialogOpen) { dialogDirty = relevant = true; }
-                if (rec.target?.closest?.('[role="tablist"]')) { tabsDirty = relevant = true; }
+                if (!tabsDirty && onHome && targetEl?.closest?.('[role="tablist"]')) { tabsDirty = relevant = true; }
             }
+            if (rec.addedNodes.length === 0) continue;
+            if (targetEl?.closest?.('[data-testid="app-text-transition-container"]')) continue;
+            const inTweet = Boolean(targetEl?.closest?.('article[data-testid="tweet"]'));
             for (const n of rec.addedNodes) {
-                const el = n.nodeType === Node.ELEMENT_NODE ? n : (n.nodeType === Node.TEXT_NODE ? rec.target : null);
+                const el = n.nodeType === Node.ELEMENT_NODE ? n : (n.nodeType === Node.TEXT_NODE ? targetEl : null);
                 if (!el || el.nodeType !== Node.ELEMENT_NODE || el.dataset?.twOwn === "1") continue;
-                if (el.closest?.('[data-testid="app-text-transition-container"]')) continue;
                 relevant = true;
-                const role = el.getAttribute?.("role");
                 const testId = el.getAttribute?.("data-testid");
-                if (role === "tab" || role === "tablist" || el.closest?.('[role="tablist"]') || el.querySelector?.('[role="tablist"]')) tabsDirty = true;
-                if (role === "dialog" || testId === "swipeToDismiss" || el.querySelector?.('[role="dialog"], [data-testid="swipeToDismiss"]')) dialogDirty = true;
-                if (role === "menu" || role === "banner" || el.tagName === "HEADER" || el.tagName === "NAV" || testId === "TopNavBar" || testId === "BottomBar" || testId === "Drawer" || el.querySelector?.('a[href^="/settings"], [data-testid="TopNavBar"], [data-testid="BottomBar"], header[role="banner"]')) {
-                    headerDirty = true;
+                const isTweetCell = inTweet || testId === "cellInnerDiv" || testId === "tweet";
+                if (!isTweetCell) {
+                    const role = el.getAttribute?.("role");
+                    if (!tabsDirty && onHome && (role === "tab" || role === "tablist" || el.closest?.('[role="tablist"]') || el.querySelector?.('[role="tablist"]'))) {
+                        tabsDirty = true;
+                    }
+                    if (!dialogDirty && (role === "dialog" || testId === "swipeToDismiss" || el.querySelector?.('[role="dialog"], [data-testid="swipeToDismiss"]'))) {
+                        dialogDirty = true;
+                    }
+                    if (!headerDirty && (role === "menu" || role === "banner" || el.tagName === "HEADER" || el.tagName === "NAV" || testId === "TopNavBar" || testId === "BottomBar" || testId === "Drawer" || el.querySelector?.('a[href^="/settings"], [data-testid="TopNavBar"], [data-testid="BottomBar"], header[role="banner"]'))) {
+                        headerDirty = true;
+                    }
                 }
                 if (!fullScanPending && !hasTrackedAncestor(el)) {
                     dirtyRoots.add(el);
-                    if (dirtyRoots.size > 60) { fullScanPending = true; dirtyRoots.clear(); }
+                    if (dirtyRoots.size > 120) { fullScanPending = true; dirtyRoots.clear(); }
                 }
             }
         }

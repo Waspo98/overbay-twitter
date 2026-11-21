@@ -171,7 +171,6 @@ fun TwitterWebView(
                     ownedWebViewRef.get()?.onPause()
                     CookieManager.getInstance().flush()
                 }
-                Lifecycle.Event.ON_STOP -> CookieManager.getInstance().flush()
                 else -> Unit
             }
         }
@@ -213,6 +212,7 @@ fun TwitterWebView(
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 setBackgroundColor(initialThemeColorInt)
+                setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
 
                 settings.apply {
                     javaScriptEnabled = true
