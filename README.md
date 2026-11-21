@@ -25,7 +25,7 @@ Everything runs locally on your phone inside the app's `WebView` and interceptio
 - **Classic branding:** Replaces the X logo in the launcher, splash screen, header, and drawer with the blue bird (`#1DA1F2`), and changes "Post", "Repost", and "Quote" labels back to "Tweet", "Retweet", and "Quote Tweet".
 - **Counters and tabs:** Optionally hides view counts, bookmark counts, and extra bottom-bar tabs (Grok, Communities, Spaces, Jobs).
 - **Verified badges:** Choose between showing all checkmarks, hiding paid blue badges while keeping affiliate and legacy labels, or hiding all badges.
-- **Theme sync:** Matches X's Default (Light), Dim (`#15202B`), and Lights Out (`#000000`) themes across Android system bars, native sheets, and Chrome Custom Tabs.
+- **Theme control:** Pick Follow Device (Auto), Light, Dim (`#15202B`), or Lights Out (`#000000`) from Mod Settings or the slide-out drawer, choose Dim or Lights Out for Auto dark mode, and keep Android system bars, native sheets, and Chrome Custom Tabs in sync.
 
 ### Feeds and Filtering
 - **Home feed tabs:** Pick a default Home tab (`For you`, `Following`, or a personal List), reorder or hide tabs, hide suggested topic tabs, and optionally hide the `+` button.
