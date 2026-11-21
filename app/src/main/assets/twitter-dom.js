@@ -21,7 +21,7 @@
 
     let lastKnownPath = "", lastDialogOpen = null, lastDatasetSig = "", lastReportedThemeHex = "";
     let fullScanPending = true, themeDirty = true, tabsDirty = true, headerDirty = true, dialogDirty = true;
-    let htmlObserved = false, bodyObserved = false, cachedForceBottom = false;
+    let htmlObserved = false, bodyObserved = false;
     const dirtyRoots = new Set();
 
     const getCfg = () => window.__TWITTER_CONFIG__ || {};
@@ -44,20 +44,11 @@
         return `#${h(m[1])}${h(m[2])}${h(m[3])}`.toUpperCase();
     }
 
-    function syncDatasetAndTheme(cfg, checkLayout, isUnfolded) {
-        if (typeof isUnfolded === "boolean") {
-            window.__TWITTER_IS_UNFOLDED__ = isUnfolded;
-            checkLayout = true;
-        }
+    function syncDatasetAndTheme(cfg) {
         const root = document.documentElement;
         if (!root) return;
         if (!htmlObserved) { htmlObserved = true; themeObserver.observe(root, { attributes: true, attributeFilter: ["style", "class"] }); }
         if (document.body && !bodyObserved) { bodyObserved = true; themeObserver.observe(document.body, { attributes: true, attributeFilter: ["style", "class"] }); }
-        if (checkLayout) {
-            cachedForceBottom = window.__TWITTER_IS_UNFOLDED__ === false
-                && !document.querySelector('[data-testid="BottomBar"]')
-                && Boolean(document.querySelector('header[role="banner"] nav[aria-label="Primary"]'));
-        }
         const mode = String(cfg.themeMode || "AUTO").toUpperCase();
         const darkVariant = String(cfg.autoDarkVariant || "LIGHTS_OUT").toUpperCase();
         const wantDark = mode === "DIM" || mode === "LIGHTS_OUT" || (mode === "AUTO" && Boolean(window.__TWITTER_SYSTEM_DARK__));
@@ -65,7 +56,7 @@
         const sig = [
             cfg.classicTwitterBranding !== false, cfg.removeGrok !== false, cfg.removePremiumUpsells !== false,
             Boolean(cfg.hideAddFeedButton), cfg.hideViewCounts !== false, Boolean(cfg.hideBookmarkCounts),
-            cfg.cleanBottomNav !== false, cfg.verifiedBadgeMode || "SHOW_ALL", cachedForceBottom, surfaceOverride
+            cfg.cleanBottomNav !== false, cfg.verifiedBadgeMode || "SHOW_ALL", surfaceOverride
         ].join("|");
 
         if (sig !== lastDatasetSig) {
@@ -75,7 +66,7 @@
                 twRemoveUpsells: String(cfg.removePremiumUpsells !== false), twHideAddFeed: String(Boolean(cfg.hideAddFeedButton)),
                 twHideViews: String(cfg.hideViewCounts !== false), twHideBookmarks: String(Boolean(cfg.hideBookmarkCounts)),
                 twCleanNav: String(cfg.cleanBottomNav !== false), twBadgeMode: String(cfg.verifiedBadgeMode || "SHOW_ALL"),
-                twForceBottomNav: String(cachedForceBottom), twSurfaceOverride: surfaceOverride
+                twSurfaceOverride: surfaceOverride
             });
             themeDirty = true;
         }
@@ -84,7 +75,6 @@
             const hex = rgbToHex(getComputedStyle(document.body).backgroundColor);
             if (hex) {
                 themeDirty = false;
-                root.style.setProperty("--tw-bottom-nav-bg", hex);
                 if (hex !== lastReportedThemeHex) {
                     lastReportedThemeHex = hex;
                     headerDirty = true;
@@ -94,13 +84,13 @@
         }
     }
 
-    window.__applyTwitterConfig = function (cfg, isUnfolded, isSystemDark) {
+    window.__applyTwitterConfig = function (cfg, isSystemDark) {
         if (typeof isSystemDark === "boolean") window.__TWITTER_SYSTEM_DARK__ = isSystemDark;
         window.__TW_FEATURES__?.onConfigChanged?.(cfg);
         window.__TWITTER_CONFIG__ = cfg;
         window.__twNotifyColorSchemeChange?.();
         fullScanPending = themeDirty = tabsDirty = headerDirty = dialogDirty = true;
-        syncDatasetAndTheme(cfg, true, isUnfolded);
+        syncDatasetAndTheme(cfg);
         runDomPass();
     };
 
@@ -269,7 +259,7 @@
         for (const link of document.querySelectorAll('a[href="/settings"], a[href="/settings/account"]')) {
             if (link.closest('[data-testid="primaryColumn"]')) continue;
             const navContainer = link.closest('nav[aria-label="Primary"], [role="menu"], [data-testid="Drawer"], [role="dialog"]');
-            if (!navContainer || (navContainer.tagName === "NAV" && navContainer.closest('html[data-tw-force-bottom-nav="true"] header[role="banner"]'))) continue;
+            if (!navContainer) continue;
             const anchor = link.parentElement && link.parentElement !== navContainer ? link.parentElement : link;
             const existing = navContainer.querySelector('[data-tw-mod-settings-item="true"]');
             if (existing) { if (!existing.dataset.twMetricsSynced) syncDrawerItemStyle(existing, link, anchor); continue; }
@@ -307,7 +297,7 @@
         dirtyRoots.clear();
 
         ensureStyleTag();
-        syncDatasetAndTheme(cfg, checkHeader);
+        syncDatasetAndTheme(cfg);
         updateBrandLogos(cfg.classicTwitterBranding !== false, roots, fullScan, checkHeader);
         rewriteUiTerminology(cfg.classicTwitterBranding !== false, roots, fullScan);
         if (checkHeader) {

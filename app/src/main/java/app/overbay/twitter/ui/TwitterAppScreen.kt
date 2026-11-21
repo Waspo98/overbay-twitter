@@ -1,11 +1,6 @@
 package app.overbay.twitter.ui
 
-import android.content.Context
-import android.content.ContextWrapper
 import android.view.View
-import android.view.ViewGroup
-import android.widget.FrameLayout
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -38,12 +33,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.app.MultiWindowModeChangedInfo
-import androidx.core.util.Consumer
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.overbay.twitter.model.SessionFilterStats
 import app.overbay.twitter.model.TwitterConfigRepository
@@ -55,16 +44,11 @@ import app.overbay.twitter.ui.settings.TwitterModSettingsSheet
 import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
 import app.overbay.twitter.ui.theme.TwitterTheme
 import app.overbay.twitter.ui.theme.resolveInitialColorInt
+import app.overbay.twitter.webview.FoldableLayoutPolicy
 import app.overbay.twitter.webview.TwitterWebController
 import app.overbay.twitter.webview.TwitterWebView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private tailrec fun Context.findComponentActivity(): ComponentActivity? = when (this) {
-    is ComponentActivity -> this
-    is ContextWrapper -> baseContext.findComponentActivity()
-    else -> null
-}
 
 /**
  * Root Compose container hosting the hardened Twitter WebView, 3-mode chameleon system bars,
@@ -86,23 +70,30 @@ fun TwitterAppScreen(
     val configuration = LocalConfiguration.current
     val activity = remember(context) { context.findComponentActivity() }
     val systemDark = isSystemInDarkTheme()
+    val isActivityResumed = rememberActivityResumed()
 
-    var isInMultiWindowMode by remember(activity) {
-        mutableStateOf(activity?.isInMultiWindowMode ?: false)
+    var committedLayoutState by remember {
+        mutableStateOf(
+            FoldableLayoutPolicy.resolve(
+                screenWidthDp = configuration.screenWidthDp,
+                smallestScreenWidthDp = configuration.smallestScreenWidthDp,
+                densityDpi = configuration.densityDpi
+            )
+        )
     }
-
-    DisposableEffect(activity) {
-        isInMultiWindowMode = activity?.isInMultiWindowMode ?: false
-        val listener = Consumer<MultiWindowModeChangedInfo> { info ->
-            isInMultiWindowMode = info.isInMultiWindowMode
-        }
-        activity?.addOnMultiWindowModeChangedListener(listener)
-        onDispose { activity?.removeOnMultiWindowModeChangedListener(listener) }
+    val currentLayoutState = remember(
+        configuration.screenWidthDp,
+        configuration.smallestScreenWidthDp,
+        configuration.densityDpi,
+        committedLayoutState
+    ) {
+        FoldableLayoutPolicy.resolve(
+            screenWidthDp = configuration.screenWidthDp,
+            smallestScreenWidthDp = configuration.smallestScreenWidthDp,
+            densityDpi = configuration.densityDpi,
+            fallback = committedLayoutState
+        )
     }
-
-    val isFullyUnfolded = !isInMultiWindowMode &&
-        configuration.screenWidthDp >= 600 &&
-        configuration.smallestScreenWidthDp >= 600
 
     var webThemeColorInt by remember {
         mutableIntStateOf(
@@ -138,24 +129,12 @@ fun TwitterAppScreen(
     var skipInitialDeepLink by remember { mutableStateOf(deepLinkUrl != null) }
     var isWebViewAttached by remember { mutableStateOf(false) }
 
-    // Keep system bar icon contrast & immersive fullscreen video state in lockstep with WebView.
-    DisposableEffect(activity, view, surfaceTheme, customVideoView != null) {
-        val window = activity?.window
-        if (window != null) {
-            val insetsController = WindowCompat.getInsetsController(window, view)
-            val lightBars = surfaceTheme.isLight && customVideoView == null
-            insetsController.isAppearanceLightStatusBars = lightBars
-            insetsController.isAppearanceLightNavigationBars = lightBars
-            if (customVideoView != null) {
-                insetsController.systemBarsBehavior =
-                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                insetsController.hide(WindowInsetsCompat.Type.systemBars())
-            } else {
-                insetsController.show(WindowInsetsCompat.Type.systemBars())
-            }
-        }
-        onDispose { }
-    }
+    SyncSystemBarsEffect(
+        activity = activity,
+        view = view,
+        surfaceTheme = surfaceTheme,
+        isFullscreenVideo = customVideoView != null
+    )
 
     DisposableEffect(controller) {
         controller.onForceClearCustomView = { customVideoView = null }
@@ -191,6 +170,35 @@ fun TwitterAppScreen(
                 allowReloadFallback = false
             )
         }
+    }
+
+    fun recreateWebView(clearCustomView: Boolean) {
+        controller.captureCurrentUrlIfInternal()
+        if (clearCustomView) {
+            controller.hideCustomView()
+        } else {
+            controller.customViewCallback = null
+        }
+        isWebViewAttached = false
+        customVideoView = null
+        canGoBack = false
+        mainFrameError = null
+        controller.updatePullToRefresh(modalOpen = false)
+        appliedGraphQlConfig = repository.config.value
+        webViewEpoch++
+    }
+
+    LaunchedEffect(currentLayoutState, isActivityResumed, isWebViewAttached) {
+        if (!isActivityResumed || !isWebViewAttached) return@LaunchedEffect
+        if (!FoldableLayoutPolicy.shouldRecreateWebView(committedLayoutState, currentLayoutState)) {
+            return@LaunchedEffect
+        }
+        delay(FoldableLayoutPolicy.TRANSITION_SETTLE_DELAY_MS)
+        if (!FoldableLayoutPolicy.shouldRecreateWebView(committedLayoutState, currentLayoutState)) {
+            return@LaunchedEffect
+        }
+        committedLayoutState = currentLayoutState
+        recreateWebView(clearCustomView = true)
     }
 
     fun applyThemeSelection(
@@ -252,7 +260,7 @@ fun TwitterAppScreen(
                     initialThemeColorInt = webThemeColorInt,
                     config = config,
                     configJson = configJson,
-                    isFullyUnfolded = isFullyUnfolded,
+                    isExpandedLayout = committedLayoutState.isExpanded,
                     isSystemDark = systemDark,
                     controller = controller,
                     onOpenSettings = { showSettingsSheet = true },
@@ -279,16 +287,7 @@ fun TwitterAppScreen(
                     onCustomViewChange = { v -> customVideoView = v },
                     onFirstLoadComplete = onFirstLoadComplete,
                     onMainFrameError = { err -> mainFrameError = err },
-                    onRendererCrash = {
-                        isWebViewAttached = false
-                        customVideoView = null
-                        canGoBack = false
-                        mainFrameError = null
-                        controller.customViewCallback = null
-                        controller.updatePullToRefresh(modalOpen = false)
-                        appliedGraphQlConfig = repository.config.value
-                        webViewEpoch++
-                    },
+                    onRendererCrash = { recreateWebView(clearCustomView = false) },
                     onPullRefresh = { appliedGraphQlConfig = repository.config.value },
                     onWebViewAttached = { isWebViewAttached = true },
                     modifier = Modifier
@@ -308,25 +307,7 @@ fun TwitterAppScreen(
             }
 
             customVideoView?.let { activeVideoView ->
-                key(activeVideoView) {
-                    AndroidView(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black),
-                        factory = { ctx ->
-                            FrameLayout(ctx).apply {
-                                (activeVideoView.parent as? ViewGroup)?.removeView(activeVideoView)
-                                addView(
-                                    activeVideoView,
-                                    FrameLayout.LayoutParams(
-                                        ViewGroup.LayoutParams.MATCH_PARENT,
-                                        ViewGroup.LayoutParams.MATCH_PARENT
-                                    )
-                                )
-                            }
-                        }
-                    )
-                }
+                FullscreenVideoOverlay(activeVideoView = activeVideoView)
             }
 
             SnackbarHost(
@@ -335,7 +316,7 @@ fun TwitterAppScreen(
                     .align(Alignment.BottomCenter)
                     .systemBarsPadding()
                     .imePadding()
-                    .padding(bottom = if (isFullyUnfolded) 16.dp else 58.dp)
+                    .padding(bottom = if (committedLayoutState.isExpanded) 16.dp else 58.dp)
             )
         }
 

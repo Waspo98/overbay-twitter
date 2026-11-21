@@ -35,19 +35,14 @@ class TwitterAssetBundle private constructor(
 
     fun buildConfigSeedScript(
         configJson: String,
-        isFullyUnfolded: Boolean,
         isSystemDark: Boolean = false
     ): String {
-        return buildString(configJson.length + 240) {
-            append("window.__TWITTER_IS_UNFOLDED__ = ")
-            append(isFullyUnfolded)
-            append(";\nwindow.__TWITTER_SYSTEM_DARK__ = ")
+        return buildString(configJson.length + 192) {
+            append("window.__TWITTER_SYSTEM_DARK__ = ")
             append(isSystemDark)
             append(";\nwindow.__TWITTER_CONFIG__ = ")
             append(configJson)
             append(";\nif (typeof window.__applyTwitterConfig === 'function') { window.__applyTwitterConfig(window.__TWITTER_CONFIG__, ")
-            append(isFullyUnfolded)
-            append(", ")
             append(isSystemDark)
             append("); }\n")
         }

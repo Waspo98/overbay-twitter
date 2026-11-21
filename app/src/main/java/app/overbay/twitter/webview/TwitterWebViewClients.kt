@@ -30,7 +30,6 @@ internal class TwitterWebViewClient(
     private val docStartSupported: Boolean,
     private val configRef: AtomicReference<TwitterModConfig>,
     private val configJsonRef: AtomicReference<String>,
-    private val isUnfoldedRef: AtomicReference<Boolean>,
     private val isSystemDarkRef: AtomicReference<Boolean>,
     private val themeColorRef: AtomicInteger,
     private val onCanGoBackChange: (Boolean) -> Unit,
@@ -41,13 +40,12 @@ internal class TwitterWebViewClient(
 
     override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
-        if (!url.isNullOrBlank()) controller.lastKnownUrl = url
+        if (TwitterWebController.isSafeInternalUrl(url)) controller.lastKnownUrl = url!!
         onMainFrameError(null)
         if (!docStartSupported) {
             view.evaluateJavascript(
                 assetBundle.buildConfigSeedScript(
                     configJson = configJsonRef.get(),
-                    isFullyUnfolded = isUnfoldedRef.get(),
                     isSystemDark = isSystemDarkRef.get()
                 ),
                 null
@@ -68,7 +66,7 @@ internal class TwitterWebViewClient(
 
     override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
         super.doUpdateVisitedHistory(view, url, isReload)
-        if (!url.isNullOrBlank()) controller.lastKnownUrl = url
+        if (TwitterWebController.isSafeInternalUrl(url)) controller.lastKnownUrl = url!!
         if (view != null) onCanGoBackChange(view.canGoBack())
         controller.updatePullToRefresh(pathBlocked = isPullRefreshBlockedPath(url))
     }

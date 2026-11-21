@@ -28,6 +28,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.ScriptHandler
+import androidx.webkit.UserAgentMetadata
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
@@ -50,7 +51,7 @@ fun TwitterWebView(
     initialThemeColorInt: Int,
     config: TwitterModConfig,
     configJson: String,
-    isFullyUnfolded: Boolean,
+    isExpandedLayout: Boolean,
     isSystemDark: Boolean,
     controller: TwitterWebController,
     onOpenSettings: () -> Unit,
@@ -75,7 +76,6 @@ fun TwitterWebView(
 
     val configRef = remember { AtomicReference(config) }
     val configJsonRef = remember { AtomicReference(configJson) }
-    val isUnfoldedRef = remember { AtomicReference(isFullyUnfolded) }
     val isSystemDarkRef = remember { AtomicReference(isSystemDark) }
     val themeColorRef = remember { AtomicInteger(initialThemeColorInt) }
 
@@ -112,17 +112,16 @@ fun TwitterWebView(
     val coreScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
     val ownedWebViewRef = remember { AtomicReference<WebView?>(null) }
     val ownedSwipeRefreshRef = remember { AtomicReference<SwipeRefreshLayout?>(null) }
-    val lastSeededStateRef = remember { AtomicReference<Triple<String, Boolean, Boolean>?>(null) }
-    val baseUserAgentRef = remember { AtomicReference<String?>(null) }
+    val lastSeededStateRef = remember { AtomicReference<Pair<String, Boolean>?>(null) }
     var webViewAttached by remember { mutableStateOf(false) }
 
-    fun registerConfigStartScript(webView: WebView, json: String, unfolded: Boolean, systemDark: Boolean) {
+    fun registerConfigStartScript(webView: WebView, json: String, systemDark: Boolean) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
         configScriptHandlerRef.getAndSet(null)?.remove()
         val handler = runCatching {
             WebViewCompat.addDocumentStartJavaScript(
                 webView,
-                assetBundle.buildConfigSeedScript(json, unfolded, systemDark),
+                assetBundle.buildConfigSeedScript(json, systemDark),
                 ORIGIN_ALLOWLIST
             )
         }.getOrNull()
@@ -133,7 +132,6 @@ fun TwitterWebView(
     SideEffect {
         configRef.set(config)
         configJsonRef.set(configJson)
-        isUnfoldedRef.set(isFullyUnfolded)
         isSystemDarkRef.set(isSystemDark)
         themeColorRef.set(initialThemeColorInt)
     }
@@ -151,23 +149,13 @@ fun TwitterWebView(
         }
     }
 
-    LaunchedEffect(webViewAttached, isFullyUnfolded) {
+    LaunchedEffect(webViewAttached, configJson, isSystemDark) {
         val wv = ownedWebViewRef.get() ?: return@LaunchedEffect
-        baseUserAgentRef.get()?.let { baseUa ->
-            val targetUa = TwitterRequestBlocker.buildEffectiveUserAgent(baseUa, isFullyUnfolded)
-            if (wv.settings.userAgentString != targetUa) {
-                wv.settings.userAgentString = targetUa
-            }
-        }
-    }
-
-    LaunchedEffect(webViewAttached, configJson, isFullyUnfolded, isSystemDark) {
-        val wv = ownedWebViewRef.get() ?: return@LaunchedEffect
-        val stateKey = Triple(configJson, isFullyUnfolded, isSystemDark)
+        val stateKey = configJson to isSystemDark
         if (lastSeededStateRef.getAndSet(stateKey) != stateKey) {
-            registerConfigStartScript(wv, configJson, isFullyUnfolded, isSystemDark)
+            registerConfigStartScript(wv, configJson, isSystemDark)
             wv.evaluateJavascript(
-                assetBundle.buildConfigSeedScript(configJson, isFullyUnfolded, isSystemDark),
+                assetBundle.buildConfigSeedScript(configJson, isSystemDark),
                 null
             )
         }
@@ -237,11 +225,19 @@ fun TwitterWebView(
                     if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
                         WebSettingsCompat.setAlgorithmicDarkeningAllowed(this, false)
                     }
-                    baseUserAgentRef.set(userAgentString)
                     userAgentString = TwitterRequestBlocker.buildEffectiveUserAgent(
                         userAgentString,
-                        isUnfoldedRef.get()
+                        isExpandedLayout
                     )
+                    if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
+                        runCatching {
+                            val currentMeta = WebSettingsCompat.getUserAgentMetadata(this)
+                            val updatedMeta = UserAgentMetadata.Builder(currentMeta)
+                                .setMobile(!isExpandedLayout)
+                                .build()
+                            WebSettingsCompat.setUserAgentMetadata(this, updatedMeta)
+                        }
+                    }
                 }
 
                 val selfWebView = this
@@ -289,10 +285,9 @@ fun TwitterWebView(
                 val docStartSupported = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
                 if (docStartSupported) {
                     val initialJson = configJsonRef.get()
-                    val initialUnfolded = isUnfoldedRef.get()
                     val initialDark = isSystemDarkRef.get()
-                    lastSeededStateRef.set(Triple(initialJson, initialUnfolded, initialDark))
-                    registerConfigStartScript(this, initialJson, initialUnfolded, initialDark)
+                    lastSeededStateRef.set(initialJson to initialDark)
+                    registerConfigStartScript(this, initialJson, initialDark)
                     val coreHandler = runCatching {
                         WebViewCompat.addDocumentStartJavaScript(
                             this,
@@ -310,7 +305,6 @@ fun TwitterWebView(
                     docStartSupported = docStartSupported,
                     configRef = configRef,
                     configJsonRef = configJsonRef,
-                    isUnfoldedRef = isUnfoldedRef,
                     isSystemDarkRef = isSystemDarkRef,
                     themeColorRef = themeColorRef,
                     onCanGoBackChange = { latestOnCanGoBack(it) },

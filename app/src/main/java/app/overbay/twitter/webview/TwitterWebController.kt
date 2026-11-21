@@ -44,8 +44,20 @@ class TwitterWebController {
     }
 
     fun loadUrl(url: String) {
-        lastKnownUrl = url
+        if (isSafeInternalUrl(url)) {
+            lastKnownUrl = url
+        }
         webView?.loadUrl(url)
+    }
+
+    internal fun captureCurrentUrlIfInternal(): String {
+        val candidate = webView?.url
+        if (isSafeInternalUrl(candidate)) {
+            lastKnownUrl = candidate!!
+        } else if (!isSafeInternalUrl(lastKnownUrl)) {
+            lastKnownUrl = DEFAULT_HOME_URL
+        }
+        return lastKnownUrl
     }
 
     fun clearCacheAndReload() {
@@ -247,6 +259,23 @@ class TwitterWebController {
                     else -> TwitterSurfaceTheme.LIGHTS_OUT
                 }
             }
+        }
+
+        internal fun isSafeInternalUrl(url: String?): Boolean {
+            if (url.isNullOrBlank()) return false
+            if (!url.startsWith("https://", ignoreCase = true)) return false
+            val hostStart = 8
+            var hostEnd = url.length
+            for (i in hostStart until url.length) {
+                val ch = url[i]
+                if (ch == '/' || ch == ':' || ch == '?' || ch == '#') {
+                    hostEnd = i
+                    break
+                }
+            }
+            if (hostEnd <= hostStart) return false
+            val host = url.substring(hostStart, hostEnd)
+            return TwitterRequestBlocker.isInternalTwitterHost(host)
         }
 
         internal fun shouldReloadForThemeMode(

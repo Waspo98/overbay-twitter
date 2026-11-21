@@ -42,7 +42,7 @@ Everything runs locally on your phone inside the app's `WebView` and interceptio
 ### Mod Settings and Android Shell
 Open **Twitter Mod Settings** from the slide-out drawer or by long-pressing the Home tab or header bird icon. Visual toggles apply right away without reloading; GraphQL filter changes offer a one-tap feed reload.
 
-The native shell also handles `x.com` and `twitter.com` deep links, pull-to-refresh, fullscreen video playback, tablet and unfolded foldable layouts (`600dp+`), an offline retry screen, and automatic recovery if Android's WebView renderer crashes.
+The native shell also handles `x.com` and `twitter.com` deep links, pull-to-refresh, fullscreen video playback, foldable and tablet layouts (`500dp+`, reloading cleanly across fold/unfold transitions), an offline retry screen, and automatic recovery if Android's WebView renderer crashes.
 
 ## Privacy
 

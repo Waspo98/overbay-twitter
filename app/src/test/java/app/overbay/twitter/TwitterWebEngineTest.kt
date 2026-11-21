@@ -9,6 +9,8 @@ import app.overbay.twitter.model.TwitterModConfig
 import app.overbay.twitter.model.TwitterThemeMode
 import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
 import app.overbay.twitter.ui.theme.resolveInitialColorInt
+import app.overbay.twitter.webview.DisplayLayoutState
+import app.overbay.twitter.webview.FoldableLayoutPolicy
 import app.overbay.twitter.webview.TwitterRequestBlocker
 import app.overbay.twitter.webview.TwitterWebController
 import app.overbay.twitter.webview.isPullRefreshBlockedPath
@@ -138,6 +140,62 @@ class TwitterWebEngineTest {
     }
 
     @Test
+    fun foldableLayoutPolicyClassifiesPosturesRotationsSplitScreenAndZoom() {
+        val unfoldedPortrait = FoldableLayoutPolicy.resolve(690, 690, 420)
+        val unfoldedLandscape = FoldableLayoutPolicy.resolve(841, 690, 420)
+        val unfoldedZoomed = FoldableLayoutPolicy.resolve(560, 560, 480)
+        assertTrue(unfoldedPortrait.isExpanded)
+        assertTrue(unfoldedLandscape.isExpanded)
+        assertTrue(unfoldedZoomed.isExpanded)
+        // Rotating an unfolded foldable does not trigger recreation
+        assertFalse(FoldableLayoutPolicy.shouldRecreateWebView(unfoldedPortrait, unfoldedLandscape))
+
+        val foldedPortrait = FoldableLayoutPolicy.resolve(384, 384, 420)
+        val foldedLandscape = FoldableLayoutPolicy.resolve(840, 384, 420)
+        assertFalse(foldedPortrait.isExpanded)
+        assertFalse(foldedLandscape.isExpanded)
+        // Rotating a folded phone / slab phone for fullscreen video does not trigger recreation
+        assertFalse(FoldableLayoutPolicy.shouldRecreateWebView(foldedPortrait, foldedLandscape))
+
+        // Folding and unfolding trigger recreation
+        assertTrue(FoldableLayoutPolicy.shouldRecreateWebView(unfoldedPortrait, foldedPortrait))
+        assertTrue(FoldableLayoutPolicy.shouldRecreateWebView(foldedPortrait, unfoldedPortrait))
+
+        // 50/50 split-screen on an unfolded foldable drops below 500dp and triggers compact layout
+        val splitScreenHalf = FoldableLayoutPolicy.resolve(345, 690, 420)
+        assertFalse(splitScreenHalf.isExpanded)
+        assertTrue(FoldableLayoutPolicy.shouldRecreateWebView(unfoldedPortrait, splitScreenHalf))
+
+        // Density change alone (e.g. cover display with higher DPI or Display Size toggle) recreates
+        val higherDpiFolded = FoldableLayoutPolicy.resolve(384, 384, 480)
+        assertTrue(FoldableLayoutPolicy.shouldRecreateWebView(foldedPortrait, higherDpiFolded))
+
+        // Transient undefined Configuration dimensions preserve the prior fallback state safely
+        val transientUndefined = FoldableLayoutPolicy.resolve(0, 0, 420, fallback = unfoldedPortrait)
+        assertEquals(unfoldedPortrait, transientUndefined)
+        assertEquals(
+            DisplayLayoutState(isExpanded = false, densityDpi = 420),
+            FoldableLayoutPolicy.resolve(0, 0, 420)
+        )
+    }
+
+    @Test
+    fun safeInternalUrlFiltersBlankAndExternalUrls() {
+        assertTrue(TwitterWebController.isSafeInternalUrl("https://x.com/home"))
+        assertTrue(TwitterWebController.isSafeInternalUrl("https://x.com/user/status/1234567890"))
+        assertTrue(TwitterWebController.isSafeInternalUrl("https://mobile.twitter.com/i/flow/login"))
+        assertTrue(TwitterWebController.isSafeInternalUrl("https://x.com:443/notifications?tab=mentions"))
+
+        assertFalse(TwitterWebController.isSafeInternalUrl(null))
+        assertFalse(TwitterWebController.isSafeInternalUrl(""))
+        assertFalse(TwitterWebController.isSafeInternalUrl("   "))
+        assertFalse(TwitterWebController.isSafeInternalUrl("about:blank"))
+        assertFalse(TwitterWebController.isSafeInternalUrl("http://x.com/home"))
+        assertFalse(TwitterWebController.isSafeInternalUrl("https://ads.twitter.com/pixel"))
+        assertFalse(TwitterWebController.isSafeInternalUrl("https://example.com/status/1"))
+    }
+
+    @Test
     fun webAssetsRespectLineCeilingsAndCoreEngineContracts() {
         val assetsDir = resolveAssetsDir()
         val interceptor = File(assetsDir, "twitter-interceptor.js").readText()
@@ -181,6 +239,8 @@ class TwitterWebEngineTest {
         assertTrue(dom.contains("delete svg.dataset.twLogoChecked"))
         assertTrue(dom.contains("twSurfaceOverride"))
         assertFalse(dom.contains("openSettingsWithHaptic?.() ??"))
+        assertFalse(dom.contains("__TWITTER_IS_UNFOLDED__"))
+        assertFalse(dom.contains("twForceBottomNav"))
 
         // CSS contracts
         assertTrue(css.contains("removeBookmark"))
@@ -188,6 +248,7 @@ class TwitterWebEngineTest {
         assertTrue(css.contains(".tw-mod-theme-bar"))
         assertTrue(css.contains(".tw-mod-dark-subrow"))
         assertTrue(css.contains("[role=\"group\"] > div:has(> a[href*=\"/analytics\"])"))
+        assertFalse(css.contains("data-tw-force-bottom-nav"))
     }
 
     private fun resolveAssetsDir(): File {
