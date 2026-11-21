@@ -120,93 +120,87 @@ html[data-tw-badge-mode="HIDE_PAID_BLUE"] [data-testid="icon-verified"][data-tw-
 
 /* Injected Video Download Button */
 .tw-mod-dl-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    padding: 0 8px;
-    margin: 0;
-    cursor: pointer;
-    color: rgb(113, 118, 123);
-    border-radius: 9999px;
-    min-width: 34px;
-    min-height: 34px;
-    transition: color 0.15s ease, background-color 0.15s ease;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: none; padding: 0 8px; margin: 0;
+    cursor: pointer; color: rgb(113, 118, 123); border-radius: 9999px;
+    min-width: 34px; min-height: 34px; transition: color 0.15s ease, background-color 0.15s ease;
 }
-
-.tw-mod-dl-btn:active {
-    color: #1DA1F2;
-    background-color: rgba(29, 161, 242, 0.15);
-}
-
-.tw-mod-dl-btn svg {
-    width: 18px;
-    height: 18px;
-    fill: currentColor;
-}
+.tw-mod-dl-btn:active { color: #1DA1F2; background-color: rgba(29, 161, 242, 0.15); }
+.tw-mod-dl-btn svg { width: 18px; height: 18px; fill: currentColor; }
 
 /* Injected Fullscreen Photo Lightbox Download Button */
 .tw-mod-img-dl-btn {
-    position: fixed;
-    right: 16px;
-    bottom: 76px;
-    z-index: 9999;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 44px;
-    height: 44px;
-    border-radius: 9999px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    background-color: rgba(15, 20, 25, 0.78);
-    backdrop-filter: blur(8px);
-    color: #FFFFFF;
-    cursor: pointer;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-    transition: background-color 0.15s ease, transform 0.12s ease;
+    position: fixed; right: 16px; bottom: 76px; z-index: 9999;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.18); background-color: rgba(15, 20, 25, 0.78);
+    backdrop-filter: blur(8px); color: #FFFFFF; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); transition: background-color 0.15s ease, transform 0.12s ease;
 }
-
-.tw-mod-img-dl-btn:active {
-    background-color: #1DA1F2;
-    transform: scale(0.95);
-}
-
-.tw-mod-img-dl-btn svg {
-    width: 22px;
-    height: 22px;
-    fill: currentColor;
-}
+.tw-mod-img-dl-btn:active { background-color: #1DA1F2; transform: scale(0.95); }
+.tw-mod-img-dl-btn svg { width: 22px; height: 22px; fill: currentColor; }
 
 /* Injected Profile Drawer Mod Settings Entry */
 .tw-mod-drawer-item {
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    width: 100%;
-    padding: 12px 16px;
-    background: transparent;
-    border: none;
-    text-align: left;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 20px;
-    line-height: 24px;
-    font-weight: 700;
-    color: inherit;
-    transition: background-color 0.15s ease;
+    display: flex; align-items: center; gap: 24px; width: 100%; padding: 12px 16px;
+    background: transparent; border: none; text-align: left; cursor: pointer;
+    font-family: inherit; font-size: 20px; line-height: 24px; font-weight: 700;
+    color: inherit; transition: background-color 0.15s ease;
 }
+.tw-mod-drawer-item:active { background-color: rgba(29, 161, 242, 0.12); }
+.tw-mod-drawer-item svg { width: 24px; height: 24px; fill: #1DA1F2; flex-shrink: 0; }
 
-.tw-mod-drawer-item:active {
-    background-color: rgba(29, 161, 242, 0.12);
+/* Injected Slide-Out Sidebar Theme Switcher */
+.tw-mod-theme-wrap {
+    display: flex; flex-direction: column; gap: 6px;
+    margin: 10px 12px 6px; width: calc(100% - 24px); flex-shrink: 0; box-sizing: border-box;
 }
+.tw-mod-theme-bar {
+    display: flex; align-items: center; gap: 2px; padding: 3px; width: 100%; box-sizing: border-box;
+    border-radius: 9999px; background-color: rgba(128, 128, 128, 0.14); border: 1px solid rgba(128, 128, 128, 0.22);
+}
+.tw-mod-dark-subrow { display: none; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px; }
+.tw-mod-theme-wrap[data-auto-active="true"] .tw-mod-dark-subrow { display: flex; }
+.tw-mod-dark-label { font-size: 11px; line-height: 14px; font-weight: 600; opacity: 0.72; white-space: nowrap; }
+.tw-mod-dark-pills { display: inline-flex; align-items: center; gap: 4px; }
+.tw-mod-theme-btn, .tw-mod-dark-chip {
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    border: none; border-radius: 9999px; background: transparent; color: inherit; opacity: 0.82;
+    font-family: inherit; font-size: 11px; line-height: 14px; font-weight: 700; white-space: nowrap;
+    cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+.tw-mod-theme-btn { flex: 1 1 auto; min-width: 0; padding: 6px 6px; }
+.tw-mod-dark-chip { padding: 4px 9px; background-color: rgba(128, 128, 128, 0.14); border: 1px solid rgba(128, 128, 128, 0.2); }
+.tw-mod-theme-btn[aria-pressed="true"], .tw-mod-dark-chip[aria-pressed="true"] {
+    background-color: #1DA1F2; border-color: #1DA1F2; color: #FFFFFF !important;
+    opacity: 1; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+}
+.tw-mod-theme-dot {
+    width: 8px; height: 8px; border-radius: 9999px; flex-shrink: 0;
+    border: 1px solid rgba(128, 128, 128, 0.5); box-sizing: border-box;
+}
+.tw-mod-theme-btn[aria-pressed="true"] .tw-mod-theme-dot,
+.tw-mod-dark-chip[aria-pressed="true"] .tw-mod-theme-dot { border-color: rgba(255, 255, 255, 0.72); }
+.tw-mod-theme-dot[data-mode="AUTO"] { background: linear-gradient(135deg, #FFFFFF 50%, #0F1419 50%); }
+.tw-mod-theme-dot[data-mode="LIGHT"] { background-color: #FFFFFF; }
+.tw-mod-theme-dot[data-mode="DIM"] { background-color: #15202B; }
+.tw-mod-theme-dot[data-mode="LIGHTS_OUT"] { background-color: #000000; }
 
-.tw-mod-drawer-item svg {
-    width: 24px;
-    height: 24px;
-    fill: #1DA1F2;
-    flex-shrink: 0;
-}
+/* Inline style fallback for Dim/Lights Out instant surface switching */
+html[data-tw-surface-override="dim"][style*="rgb(0, 0, 0)"],
+html[data-tw-surface-override="dim"][style*="rgb(0,0,0)"],
+html[data-tw-surface-override="dim"][style*="#000"],
+html[data-tw-surface-override="dim"] [style*="background-color: rgb(0, 0, 0)"],
+html[data-tw-surface-override="dim"] [style*="background-color:rgb(0,0,0)"],
+html[data-tw-surface-override="dim"] [style*="background-color: #000"],
+html[data-tw-surface-override="dim"] [style*="background-color:#000"] { background-color: #15202B !important; }
+html[data-tw-surface-override="dim"] [style*="background-color: rgba(0, 0, 0, 0.65)"] { background-color: rgba(21, 32, 43, 0.78) !important; }
+html[data-tw-surface-override="black"][style*="rgb(21, 32, 43)"],
+html[data-tw-surface-override="black"][style*="rgb(21,32,43)"],
+html[data-tw-surface-override="black"][style*="#15202b" i],
+html[data-tw-surface-override="black"] [style*="background-color: rgb(21, 32, 43)"],
+html[data-tw-surface-override="black"] [style*="background-color:rgb(21,32,43)"],
+html[data-tw-surface-override="black"] [style*="background-color: #15202b" i] { background-color: #000000 !important; }
 
 /* Force Bottom Navigation unless device is fully unfolded full-screen */
 html[data-tw-force-bottom-nav="true"] header[role="banner"] {

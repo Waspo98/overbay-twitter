@@ -4,7 +4,9 @@ import android.content.SharedPreferences
 import app.overbay.twitter.model.DetectedHomeFeed
 import app.overbay.twitter.model.HomeFeedKind
 import app.overbay.twitter.model.TwitterConfigRepository
+import app.overbay.twitter.model.TwitterDarkVariant
 import app.overbay.twitter.model.TwitterModConfig
+import app.overbay.twitter.model.TwitterThemeMode
 import app.overbay.twitter.model.VerifiedBadgeMode
 import app.overbay.twitter.webview.TwitterRequestBlocker
 import kotlinx.serialization.encodeToString
@@ -22,6 +24,8 @@ class TwitterModConfigTest {
     fun defaultConfigEnablesCoreAdGrokUpsellAndBrandingMods() {
         val defaults = TwitterModConfig()
         assertTrue(defaults.classicTwitterBranding)
+        assertEquals(TwitterThemeMode.AUTO, defaults.themeMode)
+        assertEquals(TwitterDarkVariant.LIGHTS_OUT, defaults.autoDarkVariant)
         assertTrue(defaults.blockAds)
         assertTrue(defaults.removeGrok)
         assertTrue(defaults.removePremiumUpsells)
@@ -47,6 +51,8 @@ class TwitterModConfigTest {
     fun jsonRoundTripPreservesAllSettingsAndMutePatterns() {
         val custom = TwitterModConfig(
             classicTwitterBranding = false,
+            themeMode = TwitterThemeMode.DIM,
+            autoDarkVariant = TwitterDarkVariant.DIM,
             defaultHomeFeed = "Following",
             stripSuggestedHomeFeeds = false,
             hideAddFeedButton = true,
@@ -73,6 +79,8 @@ class TwitterModConfigTest {
         assertFalse(
             base.copy(
                 classicTwitterBranding = false,
+                themeMode = TwitterThemeMode.LIGHTS_OUT,
+                autoDarkVariant = TwitterDarkVariant.DIM,
                 removeGrok = false,
                 hideViewCounts = false,
                 verifiedBadgeMode = VerifiedBadgeMode.HIDE_ALL

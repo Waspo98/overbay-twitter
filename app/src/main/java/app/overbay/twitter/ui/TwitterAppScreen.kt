@@ -47,11 +47,14 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.overbay.twitter.model.SessionFilterStats
 import app.overbay.twitter.model.TwitterConfigRepository
+import app.overbay.twitter.model.TwitterDarkVariant
+import app.overbay.twitter.model.TwitterThemeMode
 import app.overbay.twitter.ui.settings.LinkActionSheet
 import app.overbay.twitter.ui.settings.OfflineErrorOverlay
 import app.overbay.twitter.ui.settings.TwitterModSettingsSheet
 import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
 import app.overbay.twitter.ui.theme.TwitterTheme
+import app.overbay.twitter.ui.theme.resolveInitialColorInt
 import app.overbay.twitter.webview.TwitterWebController
 import app.overbay.twitter.webview.TwitterWebView
 import kotlinx.coroutines.delay
@@ -103,10 +106,15 @@ fun TwitterAppScreen(
 
     var webThemeColorInt by remember {
         mutableIntStateOf(
-            repository.lastThemeColor.value ?: if (systemDark) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+            config.themeMode.resolveInitialColorInt(
+                lastColorInt = repository.lastThemeColor.value,
+                isSystemDark = systemDark,
+                autoDarkVariant = config.autoDarkVariant
+            )
         )
     }
     val surfaceTheme = remember(webThemeColorInt) { TwitterSurfaceTheme.fromColorInt(webThemeColorInt) }
+    var lastObservedSystemDark by remember { mutableStateOf(systemDark) }
 
     var showSettingsSheet by remember { mutableStateOf(false) }
     var longPressedLinkUrl by remember { mutableStateOf<String?>(null) }
@@ -170,6 +178,37 @@ fun TwitterAppScreen(
         onDeepLinkConsumed()
     }
 
+    LaunchedEffect(systemDark, isWebViewAttached) {
+        if (!isWebViewAttached || systemDark == lastObservedSystemDark) return@LaunchedEffect
+        lastObservedSystemDark = systemDark
+        val currentConfig = repository.config.value
+        if (currentConfig.themeMode == TwitterThemeMode.AUTO) {
+            controller.applyThemeMode(
+                mode = TwitterThemeMode.AUTO,
+                autoDarkVariant = currentConfig.autoDarkVariant,
+                isSystemDark = systemDark,
+                currentSurfaceProvider = { TwitterSurfaceTheme.fromColorInt(webThemeColorInt) },
+                allowReloadFallback = false
+            )
+        }
+    }
+
+    fun applyThemeSelection(
+        nextMode: TwitterThemeMode = repository.config.value.themeMode,
+        nextAutoVariant: TwitterDarkVariant = repository.config.value.autoDarkVariant
+    ) {
+        repository.updateConfig { it.copy(themeMode = nextMode, autoDarkVariant = nextAutoVariant) }
+        mainFrameError = null
+        controller.applyThemeMode(
+            mode = nextMode,
+            autoDarkVariant = nextAutoVariant,
+            isSystemDark = systemDark,
+            currentSurfaceProvider = { TwitterSurfaceTheme.fromColorInt(webThemeColorInt) },
+            allowReloadFallback = true,
+            onPreviewColor = { previewColor -> webThemeColorInt = previewColor }
+        )
+    }
+
     fun triggerReload(clearCache: Boolean = false) {
         appliedGraphQlConfig = repository.config.value
         mainFrameError = null
@@ -214,6 +253,7 @@ fun TwitterAppScreen(
                     config = config,
                     configJson = configJson,
                     isFullyUnfolded = isFullyUnfolded,
+                    isSystemDark = systemDark,
                     controller = controller,
                     onOpenSettings = { showSettingsSheet = true },
                     onShowLinkActions = { url -> longPressedLinkUrl = url },
@@ -221,6 +261,13 @@ fun TwitterAppScreen(
                     onThemeColorChange = { colorInt ->
                         webThemeColorInt = colorInt
                         repository.updateLastThemeColor(colorInt)
+                        controller.onObservedSurfaceTheme(TwitterSurfaceTheme.fromColorInt(colorInt))
+                    },
+                    onSetThemeMode = { rawMode ->
+                        applyThemeSelection(nextMode = TwitterThemeMode.fromWireValue(rawMode))
+                    },
+                    onSetAutoDarkVariant = { rawVariant ->
+                        applyThemeSelection(nextAutoVariant = TwitterDarkVariant.fromWireValue(rawVariant))
                     },
                     onStatsDelta = { adsDelta, clutterDelta ->
                         sessionStats = SessionFilterStats(
@@ -299,12 +346,23 @@ fun TwitterAppScreen(
                 sessionStats = sessionStats,
                 pendingReload = pendingReload,
                 onSelectDefaultFeed = repository::setDefaultHomeFeed,
+                onSelectThemeMode = { mode -> applyThemeSelection(nextMode = mode) },
+                onSelectAutoDarkVariant = { variant -> applyThemeSelection(nextAutoVariant = variant) },
                 onToggleFeedVisibility = repository::toggleHomeFeedVisibility,
                 onMoveFeed = repository::moveHomeFeed,
                 onUpdate = repository::updateConfig,
                 onAddMutePattern = { pattern -> repository.addMutePattern(pattern) },
                 onRemoveMutePattern = repository::removeMutePattern,
-                onResetDefaults = repository::resetDefaults,
+                onResetDefaults = {
+                    val prev = repository.config.value
+                    repository.resetDefaults()
+                    if (prev.themeMode != TwitterThemeMode.AUTO || prev.autoDarkVariant != TwitterDarkVariant.LIGHTS_OUT) {
+                        applyThemeSelection(
+                            nextMode = TwitterThemeMode.AUTO,
+                            nextAutoVariant = TwitterDarkVariant.LIGHTS_OUT
+                        )
+                    }
+                },
                 onReloadTimeline = { triggerReload(clearCache = false) },
                 onClearCacheAndReload = { triggerReload(clearCache = true) },
                 onDismiss = ::dismissSettingsSheet

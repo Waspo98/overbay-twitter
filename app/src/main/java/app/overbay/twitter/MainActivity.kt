@@ -1,6 +1,7 @@
 package app.overbay.twitter
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.view.animation.DecelerateInterpolator
@@ -15,6 +16,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import app.overbay.twitter.model.TwitterConfigRepository
 import app.overbay.twitter.ui.TwitterAppScreen
 import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
+import app.overbay.twitter.ui.theme.resolveInitialColorInt
 import app.overbay.twitter.webview.TwitterRequestBlocker
 
 /**
@@ -23,6 +25,7 @@ import app.overbay.twitter.webview.TwitterRequestBlocker
 class MainActivity : ComponentActivity() {
 
     private var deepLinkUrl by mutableStateOf<String?>(null)
+    private var lastNightModeMask: Int = 0
 
     @Volatile
     private var isWebViewReady = false
@@ -47,10 +50,15 @@ class MainActivity : ComponentActivity() {
         }
 
         super.onCreate(savedInstanceState)
+        lastNightModeMask = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        val isSystemDark = lastNightModeMask == Configuration.UI_MODE_NIGHT_YES
         val repository = TwitterConfigRepository.getInstance(this)
-        val persistedLight = repository.lastThemeColor.value?.let {
-            TwitterSurfaceTheme.fromColorInt(it).isLight
-        } ?: false
+        val initialColorInt = repository.config.value.themeMode.resolveInitialColorInt(
+            lastColorInt = repository.lastThemeColor.value,
+            isSystemDark = isSystemDark,
+            autoDarkVariant = repository.config.value.autoDarkVariant
+        )
+        val persistedLight = TwitterSurfaceTheme.fromColorInt(initialColorInt).isLight
         val initialBarStyle = if (persistedLight) {
             SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
         } else {
@@ -71,6 +79,18 @@ class MainActivity : ComponentActivity() {
                 onFirstLoadComplete = { isWebViewReady = true }
             )
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        val nextNightMask = newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        if (nextNightMask != lastNightModeMask) {
+            lastNightModeMask = nextNightMask
+            // Refresh Activity theme attributes (including android:isLightTheme) for WebView prefers-color-scheme.
+            val refreshedTheme = resources.newTheme()
+            refreshedTheme.applyStyle(R.style.Theme_Twitter, true)
+            theme.setTo(refreshedTheme)
+        }
+        super.onConfigurationChanged(newConfig)
     }
 
     override fun onNewIntent(intent: Intent) {

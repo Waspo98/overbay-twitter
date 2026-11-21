@@ -1,5 +1,6 @@
 package app.overbay.twitter.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -24,6 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +38,8 @@ import androidx.compose.ui.unit.dp
 import app.overbay.twitter.BuildConfig
 import app.overbay.twitter.R
 import app.overbay.twitter.model.SessionFilterStats
+import app.overbay.twitter.model.TwitterDarkVariant
+import app.overbay.twitter.model.TwitterThemeMode
 import app.overbay.twitter.model.VerifiedBadgeMode
 import app.overbay.twitter.ui.theme.TwitterBlue
 
@@ -120,6 +125,87 @@ fun ModSwitchRow(
             )
         }
     }
+}
+
+@Composable
+fun ThemeModeRow(
+    selectedMode: TwitterThemeMode,
+    selectedAutoDarkVariant: TwitterDarkVariant,
+    onSelect: (TwitterThemeMode) -> Unit,
+    onSelectAutoDarkVariant: (TwitterDarkVariant) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = "Appearance Theme",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "Follow device light/dark mode automatically or pin Light, Dim, or Lights Out.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            val entries = TwitterThemeMode.entries
+            entries.forEachIndexed { index, mode ->
+                SegmentedButton(
+                    selected = selectedMode == mode,
+                    onClick = { onSelect(mode) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = entries.size)
+                ) {
+                    Text(mode.shortLabel, maxLines = 1)
+                }
+            }
+        }
+        AnimatedVisibility(visible = selectedMode == TwitterThemeMode.AUTO) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Auto Dark Style",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    val variants = TwitterDarkVariant.entries
+                    variants.forEachIndexed { index, variant ->
+                        SegmentedButton(
+                            selected = selectedAutoDarkVariant == variant,
+                            onClick = { onSelectAutoDarkVariant(variant) },
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = variants.size)
+                        ) {
+                            Text(variant.label, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ResetDefaultsDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Reset Mod Settings?") },
+        text = {
+            Text("This restores all default toggles and clears your custom feed order and muted rules.")
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Reset") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable

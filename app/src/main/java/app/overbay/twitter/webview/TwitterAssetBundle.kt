@@ -11,12 +11,13 @@ import org.json.JSONObject
  */
 class TwitterAssetBundle private constructor(
     interceptorJs: String,
+    themeJs: String,
     featuresJs: String,
     domJs: String,
     quotedCss: String
 ) {
     val coreEngineScript: String = buildString(
-        BRIDGE_SHIM_JS.length + quotedCss.length + interceptorJs.length + featuresJs.length + domJs.length + 96
+        BRIDGE_SHIM_JS.length + quotedCss.length + interceptorJs.length + themeJs.length + featuresJs.length + domJs.length + 112
     ) {
         append("window.__TWITTER_CLEAN_CSS__ = ")
         append(quotedCss)
@@ -25,19 +26,29 @@ class TwitterAssetBundle private constructor(
         append("\n;\n")
         append(interceptorJs)
         append("\n;\n")
+        append(themeJs)
+        append("\n;\n")
         append(featuresJs)
         append("\n;\n")
         append(domJs)
     }
 
-    fun buildConfigSeedScript(configJson: String, isFullyUnfolded: Boolean): String {
-        return buildString(configJson.length + 180) {
+    fun buildConfigSeedScript(
+        configJson: String,
+        isFullyUnfolded: Boolean,
+        isSystemDark: Boolean = false
+    ): String {
+        return buildString(configJson.length + 240) {
             append("window.__TWITTER_IS_UNFOLDED__ = ")
             append(isFullyUnfolded)
+            append(";\nwindow.__TWITTER_SYSTEM_DARK__ = ")
+            append(isSystemDark)
             append(";\nwindow.__TWITTER_CONFIG__ = ")
             append(configJson)
             append(";\nif (typeof window.__applyTwitterConfig === 'function') { window.__applyTwitterConfig(window.__TWITTER_CONFIG__, ")
             append(isFullyUnfolded)
+            append(", ")
+            append(isSystemDark)
             append("); }\n")
         }
     }
@@ -54,10 +65,11 @@ class TwitterAssetBundle private constructor(
 
         private fun loadFromAssets(context: Context): TwitterAssetBundle {
             val interceptorJs = readAsset(context, "twitter-interceptor.js")
+            val themeJs = readAsset(context, "twitter-theme.js")
             val featuresJs = readAsset(context, "twitter-features.js")
             val domJs = readAsset(context, "twitter-dom.js")
             val quotedCss = JSONObject.quote(readAsset(context, "twitter-clean.css"))
-            return TwitterAssetBundle(interceptorJs, featuresJs, domJs, quotedCss)
+            return TwitterAssetBundle(interceptorJs, themeJs, featuresJs, domJs, quotedCss)
         }
 
         private fun readAsset(context: Context, name: String): String {
@@ -81,6 +93,8 @@ class TwitterAssetBundle private constructor(
                     setPullToRefreshModalOpen: (open) => post({ type: "setPullToRefreshModalOpen", open: Boolean(open) }),
                     reportHomeFeeds: (feedsJson) => post({ type: "reportHomeFeeds", feedsJson: String(feedsJson || "") }),
                     onThemeColorChanged: (hexColor) => post({ type: "onThemeColorChanged", hexColor: String(hexColor || "") }),
+                    setThemeMode: (mode) => post({ type: "setThemeMode", mode: String(mode || "") }),
+                    setAutoDarkVariant: (variant) => post({ type: "setAutoDarkVariant", variant: String(variant || "") }),
                     reportStatsDelta: (ads, clutter) => post({ type: "reportStatsDelta", ads: Number(ads) || 0, clutter: Number(clutter) || 0 })
                 };
             })();

@@ -28,6 +28,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.ScriptHandler
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import app.overbay.twitter.bridge.TwitterNativeBridge
@@ -50,6 +51,7 @@ fun TwitterWebView(
     config: TwitterModConfig,
     configJson: String,
     isFullyUnfolded: Boolean,
+    isSystemDark: Boolean,
     controller: TwitterWebController,
     onOpenSettings: () -> Unit,
     onShowLinkActions: (String) -> Unit,
@@ -59,6 +61,8 @@ fun TwitterWebView(
     modifier: Modifier = Modifier,
     onReportHomeFeeds: (String) -> Unit = {},
     onThemeColorChange: (Int) -> Unit = {},
+    onSetThemeMode: (String) -> Unit = {},
+    onSetAutoDarkVariant: (String) -> Unit = {},
     onStatsDelta: (Int, Int) -> Unit = { _, _ -> },
     onMainFrameError: (String?) -> Unit = {},
     onRendererCrash: () -> Unit = {},
@@ -72,6 +76,7 @@ fun TwitterWebView(
     val configRef = remember { AtomicReference(config) }
     val configJsonRef = remember { AtomicReference(configJson) }
     val isUnfoldedRef = remember { AtomicReference(isFullyUnfolded) }
+    val isSystemDarkRef = remember { AtomicReference(isSystemDark) }
     val themeColorRef = remember { AtomicInteger(initialThemeColorInt) }
 
     val latestOnOpenSettings by rememberUpdatedState(onOpenSettings)
@@ -81,6 +86,8 @@ fun TwitterWebView(
     val latestOnFirstLoad by rememberUpdatedState(onFirstLoadComplete)
     val latestOnReportHomeFeeds by rememberUpdatedState(onReportHomeFeeds)
     val latestOnThemeColorChange by rememberUpdatedState(onThemeColorChange)
+    val latestOnSetThemeMode by rememberUpdatedState(onSetThemeMode)
+    val latestOnSetAutoDarkVariant by rememberUpdatedState(onSetAutoDarkVariant)
     val latestOnStatsDelta by rememberUpdatedState(onStatsDelta)
     val latestOnMainFrameError by rememberUpdatedState(onMainFrameError)
     val latestOnRendererCrash by rememberUpdatedState(onRendererCrash)
@@ -105,17 +112,17 @@ fun TwitterWebView(
     val coreScriptHandlerRef = remember { AtomicReference<ScriptHandler?>(null) }
     val ownedWebViewRef = remember { AtomicReference<WebView?>(null) }
     val ownedSwipeRefreshRef = remember { AtomicReference<SwipeRefreshLayout?>(null) }
-    val lastSeededStateRef = remember { AtomicReference<Pair<String, Boolean>?>(null) }
+    val lastSeededStateRef = remember { AtomicReference<Triple<String, Boolean, Boolean>?>(null) }
     val baseUserAgentRef = remember { AtomicReference<String?>(null) }
     var webViewAttached by remember { mutableStateOf(false) }
 
-    fun registerConfigStartScript(webView: WebView, json: String, unfolded: Boolean) {
+    fun registerConfigStartScript(webView: WebView, json: String, unfolded: Boolean, systemDark: Boolean) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
         configScriptHandlerRef.getAndSet(null)?.remove()
         val handler = runCatching {
             WebViewCompat.addDocumentStartJavaScript(
                 webView,
-                assetBundle.buildConfigSeedScript(json, unfolded),
+                assetBundle.buildConfigSeedScript(json, unfolded, systemDark),
                 ORIGIN_ALLOWLIST
             )
         }.getOrNull()
@@ -127,6 +134,7 @@ fun TwitterWebView(
         configRef.set(config)
         configJsonRef.set(configJson)
         isUnfoldedRef.set(isFullyUnfolded)
+        isSystemDarkRef.set(isSystemDark)
         themeColorRef.set(initialThemeColorInt)
     }
 
@@ -153,12 +161,15 @@ fun TwitterWebView(
         }
     }
 
-    LaunchedEffect(webViewAttached, configJson, isFullyUnfolded) {
+    LaunchedEffect(webViewAttached, configJson, isFullyUnfolded, isSystemDark) {
         val wv = ownedWebViewRef.get() ?: return@LaunchedEffect
-        val stateKey = configJson to isFullyUnfolded
+        val stateKey = Triple(configJson, isFullyUnfolded, isSystemDark)
         if (lastSeededStateRef.getAndSet(stateKey) != stateKey) {
-            registerConfigStartScript(wv, configJson, isFullyUnfolded)
-            wv.evaluateJavascript(assetBundle.buildConfigSeedScript(configJson, isFullyUnfolded), null)
+            registerConfigStartScript(wv, configJson, isFullyUnfolded, isSystemDark)
+            wv.evaluateJavascript(
+                assetBundle.buildConfigSeedScript(configJson, isFullyUnfolded, isSystemDark),
+                null
+            )
         }
     }
 
@@ -223,6 +234,9 @@ fun TwitterWebView(
                     setGeolocationEnabled(false)
                     mediaPlaybackRequiresUserGesture = configRef.get().disableVideoAutoplay
                     mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                    if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+                        WebSettingsCompat.setAlgorithmicDarkeningAllowed(this, false)
+                    }
                     baseUserAgentRef.set(userAgentString)
                     userAgentString = TwitterRequestBlocker.buildEffectiveUserAgent(
                         userAgentString,
@@ -253,6 +267,8 @@ fun TwitterWebView(
                         controller.applyThemeColor(colorInt)
                         latestOnThemeColorChange(colorInt)
                     },
+                    onSetThemeMode = { rawMode -> latestOnSetThemeMode(rawMode) },
+                    onSetAutoDarkVariant = { rawVariant -> latestOnSetAutoDarkVariant(rawVariant) },
                     onStatsDelta = { ads, clutter -> latestOnStatsDelta(ads, clutter) }
                 )
 
@@ -274,8 +290,9 @@ fun TwitterWebView(
                 if (docStartSupported) {
                     val initialJson = configJsonRef.get()
                     val initialUnfolded = isUnfoldedRef.get()
-                    lastSeededStateRef.set(initialJson to initialUnfolded)
-                    registerConfigStartScript(this, initialJson, initialUnfolded)
+                    val initialDark = isSystemDarkRef.get()
+                    lastSeededStateRef.set(Triple(initialJson, initialUnfolded, initialDark))
+                    registerConfigStartScript(this, initialJson, initialUnfolded, initialDark)
                     val coreHandler = runCatching {
                         WebViewCompat.addDocumentStartJavaScript(
                             this,
@@ -294,6 +311,7 @@ fun TwitterWebView(
                     configRef = configRef,
                     configJsonRef = configJsonRef,
                     isUnfoldedRef = isUnfoldedRef,
+                    isSystemDarkRef = isSystemDarkRef,
                     themeColorRef = themeColorRef,
                     onCanGoBackChange = { latestOnCanGoBack(it) },
                     onFirstLoadComplete = { latestOnFirstLoad() },
@@ -335,7 +353,11 @@ fun TwitterWebView(
             controller.applyThemeColor(initialThemeColorInt)
             controller.updatePullToRefresh(pathBlocked = isPullRefreshBlockedPath(initialUrl))
             controller.lastKnownUrl = initialUrl
-            webView.loadUrl(initialUrl)
+            controller.syncStartupNightModeCookie(configRef.get().themeMode, isSystemDarkRef.get()) {
+                if (ownedWebViewRef.get() === webView) {
+                    webView.loadUrl(initialUrl)
+                }
+            }
             webViewAttached = true
             swipeRefresh
         }

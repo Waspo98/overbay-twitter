@@ -21,6 +21,8 @@ class TwitterNativeBridge(
     private val onPullToRefreshModalChange: (Boolean) -> Unit = {},
     private val onReportHomeFeeds: (String) -> Unit = {},
     private val onThemeColorChange: (Int) -> Unit = {},
+    private val onSetThemeMode: (String) -> Unit = {},
+    private val onSetAutoDarkVariant: (String) -> Unit = {},
     private val onStatsDelta: (adsDelta: Int, clutterDelta: Int) -> Unit = { _, _ -> }
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -38,6 +40,8 @@ class TwitterNativeBridge(
             "setPullToRefreshModalOpen" -> setPullToRefreshModalOpen(obj.optBoolean("open", false))
             "reportHomeFeeds" -> reportHomeFeeds(obj.optString("feedsJson", ""))
             "onThemeColorChanged" -> onThemeColorChanged(obj.optString("hexColor", ""))
+            "setThemeMode" -> setThemeMode(obj.optString("mode", ""))
+            "setAutoDarkVariant" -> setAutoDarkVariant(obj.optString("variant", ""))
             "reportStatsDelta" -> reportStatsDelta(obj.optInt("ads", 0), obj.optInt("clutter", 0))
         }
     }
@@ -106,6 +110,18 @@ class TwitterNativeBridge(
     fun onThemeColorChanged(hexColor: String) {
         val parsed = parseHexColor(hexColor) ?: return
         postToMain { onThemeColorChange(parsed) }
+    }
+
+    @JavascriptInterface
+    fun setThemeMode(mode: String) {
+        if (mode.isBlank()) return
+        postToMain { onSetThemeMode(mode) }
+    }
+
+    @JavascriptInterface
+    fun setAutoDarkVariant(variant: String) {
+        if (variant.isBlank()) return
+        postToMain { onSetAutoDarkVariant(variant) }
     }
 
     @JavascriptInterface

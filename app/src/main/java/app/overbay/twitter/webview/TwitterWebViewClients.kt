@@ -31,6 +31,7 @@ internal class TwitterWebViewClient(
     private val configRef: AtomicReference<TwitterModConfig>,
     private val configJsonRef: AtomicReference<String>,
     private val isUnfoldedRef: AtomicReference<Boolean>,
+    private val isSystemDarkRef: AtomicReference<Boolean>,
     private val themeColorRef: AtomicInteger,
     private val onCanGoBackChange: (Boolean) -> Unit,
     private val onFirstLoadComplete: () -> Unit,
@@ -44,7 +45,11 @@ internal class TwitterWebViewClient(
         onMainFrameError(null)
         if (!docStartSupported) {
             view.evaluateJavascript(
-                assetBundle.buildConfigSeedScript(configJsonRef.get(), isUnfoldedRef.get()),
+                assetBundle.buildConfigSeedScript(
+                    configJson = configJsonRef.get(),
+                    isFullyUnfolded = isUnfoldedRef.get(),
+                    isSystemDark = isSystemDarkRef.get()
+                ),
                 null
             )
             view.evaluateJavascript(assetBundle.coreEngineScript, null)

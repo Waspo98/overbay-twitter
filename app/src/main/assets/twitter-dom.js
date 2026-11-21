@@ -58,10 +58,14 @@
                 && !document.querySelector('[data-testid="BottomBar"]')
                 && Boolean(document.querySelector('header[role="banner"] nav[aria-label="Primary"]'));
         }
+        const mode = String(cfg.themeMode || "AUTO").toUpperCase();
+        const darkVariant = String(cfg.autoDarkVariant || "LIGHTS_OUT").toUpperCase();
+        const wantDark = mode === "DIM" || mode === "LIGHTS_OUT" || (mode === "AUTO" && Boolean(window.__TWITTER_SYSTEM_DARK__));
+        const surfaceOverride = !wantDark ? "" : ((mode === "DIM" || (mode === "AUTO" && darkVariant === "DIM")) ? "dim" : "black");
         const sig = [
             cfg.classicTwitterBranding !== false, cfg.removeGrok !== false, cfg.removePremiumUpsells !== false,
             Boolean(cfg.hideAddFeedButton), cfg.hideViewCounts !== false, Boolean(cfg.hideBookmarkCounts),
-            cfg.cleanBottomNav !== false, cfg.verifiedBadgeMode || "SHOW_ALL", cachedForceBottom
+            cfg.cleanBottomNav !== false, cfg.verifiedBadgeMode || "SHOW_ALL", cachedForceBottom, surfaceOverride
         ].join("|");
 
         if (sig !== lastDatasetSig) {
@@ -71,10 +75,11 @@
                 twRemoveUpsells: String(cfg.removePremiumUpsells !== false), twHideAddFeed: String(Boolean(cfg.hideAddFeedButton)),
                 twHideViews: String(cfg.hideViewCounts !== false), twHideBookmarks: String(Boolean(cfg.hideBookmarkCounts)),
                 twCleanNav: String(cfg.cleanBottomNav !== false), twBadgeMode: String(cfg.verifiedBadgeMode || "SHOW_ALL"),
-                twForceBottomNav: String(cachedForceBottom)
+                twForceBottomNav: String(cachedForceBottom), twSurfaceOverride: surfaceOverride
             });
             themeDirty = true;
         }
+        window.__TW_THEME__?.syncSurfaceStyleSheet?.(surfaceOverride);
         if (themeDirty && document.body) {
             const hex = rgbToHex(getComputedStyle(document.body).backgroundColor);
             if (hex) {
@@ -82,15 +87,18 @@
                 root.style.setProperty("--tw-bottom-nav-bg", hex);
                 if (hex !== lastReportedThemeHex) {
                     lastReportedThemeHex = hex;
+                    headerDirty = true;
                     window.TwitterBridge?.onThemeColorChanged?.(hex);
                 }
             }
         }
     }
 
-    window.__applyTwitterConfig = function (cfg, isUnfolded) {
+    window.__applyTwitterConfig = function (cfg, isUnfolded, isSystemDark) {
+        if (typeof isSystemDark === "boolean") window.__TWITTER_SYSTEM_DARK__ = isSystemDark;
         window.__TW_FEATURES__?.onConfigChanged?.(cfg);
         window.__TWITTER_CONFIG__ = cfg;
+        window.__twNotifyColorSchemeChange?.();
         fullScanPending = themeDirty = tabsDirty = headerDirty = dialogDirty = true;
         syncDatasetAndTheme(cfg, true, isUnfolded);
         runDomPass();
@@ -305,6 +313,9 @@
         if (checkHeader) {
             bindHeaderLongPress();
             injectDrawerModSettingsEntry();
+        }
+        if (checkHeader || checkDialog) {
+            window.__TW_THEME__?.syncDrawerThemeBars?.(cfg);
         }
         if (window.__TW_FEATURES__.handleHomeTabs(cfg, checkTabs)) tabsDirty = false;
         window.__TW_FEATURES__.enhanceTweetsAndProfiles(cfg, roots, fullScan);

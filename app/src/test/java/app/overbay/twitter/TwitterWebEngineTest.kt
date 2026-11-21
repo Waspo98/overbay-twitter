@@ -4,9 +4,13 @@ import android.content.SharedPreferences
 import app.overbay.twitter.bridge.TwitterNativeBridge
 import app.overbay.twitter.model.SessionFilterStats
 import app.overbay.twitter.model.TwitterConfigRepository
+import app.overbay.twitter.model.TwitterDarkVariant
 import app.overbay.twitter.model.TwitterModConfig
+import app.overbay.twitter.model.TwitterThemeMode
 import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
+import app.overbay.twitter.ui.theme.resolveInitialColorInt
 import app.overbay.twitter.webview.TwitterRequestBlocker
+import app.overbay.twitter.webview.TwitterWebController
 import app.overbay.twitter.webview.isPullRefreshBlockedPath
 import java.io.File
 import org.junit.Assert.assertEquals
@@ -28,6 +32,51 @@ class TwitterWebEngineTest {
 
         assertEquals(TwitterSurfaceTheme.LIGHTS_OUT, TwitterSurfaceTheme.fromColorInt(0xFF000000.toInt()))
         assertEquals(TwitterSurfaceTheme.LIGHTS_OUT, TwitterSurfaceTheme.fromColorInt(0xFF0F1419.toInt()))
+    }
+
+    @Test
+    fun themeModeResolutionAndCookieSyncRespectDeviceLightAndDarkModes() {
+        assertEquals(TwitterThemeMode.DIM, TwitterThemeMode.fromWireValue("dim"))
+        assertEquals(TwitterThemeMode.LIGHTS_OUT, TwitterThemeMode.fromWireValue("LIGHTS_OUT"))
+        assertEquals(TwitterThemeMode.AUTO, TwitterThemeMode.fromWireValue("unknown"))
+        assertEquals(TwitterDarkVariant.DIM, TwitterDarkVariant.fromWireValue("dim"))
+        assertEquals(TwitterDarkVariant.LIGHTS_OUT, TwitterDarkVariant.fromWireValue("unknown"))
+
+        // Auto resolves light in day mode and honors autoDarkVariant (Dim vs Lights Out) in night mode
+        val dimColor = TwitterSurfaceTheme.DIM.backgroundColorInt
+        val blackColor = TwitterSurfaceTheme.LIGHTS_OUT.backgroundColorInt
+        val lightColor = TwitterSurfaceTheme.LIGHT.backgroundColorInt
+        assertEquals(
+            lightColor,
+            TwitterThemeMode.AUTO.resolveInitialColorInt(blackColor, isSystemDark = false, autoDarkVariant = TwitterDarkVariant.DIM)
+        )
+        assertEquals(
+            dimColor,
+            TwitterThemeMode.AUTO.resolveInitialColorInt(blackColor, isSystemDark = true, autoDarkVariant = TwitterDarkVariant.DIM)
+        )
+        assertEquals(
+            blackColor,
+            TwitterThemeMode.AUTO.resolveInitialColorInt(dimColor, isSystemDark = true, autoDarkVariant = TwitterDarkVariant.LIGHTS_OUT)
+        )
+        assertEquals(lightColor, TwitterThemeMode.LIGHT.resolveInitialColorInt(blackColor, isSystemDark = true))
+        assertEquals(dimColor, TwitterThemeMode.DIM.resolveInitialColorInt(lightColor, isSystemDark = false))
+        assertEquals(blackColor, TwitterThemeMode.LIGHTS_OUT.resolveInitialColorInt(lightColor, isSystemDark = false))
+
+        assertEquals("1", TwitterWebController.extractNightModeCookie("auth_token=abc; night_mode=1; ct0=xyz"))
+        assertNull(TwitterWebController.extractNightModeCookie("auth_token=abc; night_mode=9"))
+
+        assertEquals("0", TwitterWebController.resolveTargetNightModeCookie(TwitterThemeMode.AUTO, isSystemDark = false))
+        assertEquals("2", TwitterWebController.resolveTargetNightModeCookie(TwitterThemeMode.AUTO, isSystemDark = true))
+        assertEquals("0", TwitterWebController.resolveTargetNightModeCookie(TwitterThemeMode.LIGHT, isSystemDark = true))
+        assertEquals("2", TwitterWebController.resolveTargetNightModeCookie(TwitterThemeMode.DIM, isSystemDark = false))
+        assertEquals("2", TwitterWebController.resolveTargetNightModeCookie(TwitterThemeMode.LIGHTS_OUT, isSystemDark = false))
+
+        // Dim <-> Lights Out never needs reload; polarity flips trigger fallback reload only if live matchMedia didn't switch
+        assertTrue(TwitterWebController.shouldReloadForThemeMode(TwitterThemeMode.AUTO, isSystemDark = false, currentSurface = TwitterSurfaceTheme.LIGHTS_OUT))
+        assertFalse(TwitterWebController.shouldReloadForThemeMode(TwitterThemeMode.AUTO, isSystemDark = false, currentSurface = TwitterSurfaceTheme.LIGHT))
+        assertFalse(TwitterWebController.shouldReloadForThemeMode(TwitterThemeMode.DIM, isSystemDark = true, currentSurface = TwitterSurfaceTheme.LIGHTS_OUT))
+        assertFalse(TwitterWebController.shouldReloadForThemeMode(TwitterThemeMode.LIGHTS_OUT, isSystemDark = true, currentSurface = TwitterSurfaceTheme.DIM))
+        assertTrue(TwitterWebController.shouldReloadForThemeMode(TwitterThemeMode.DIM, isSystemDark = false, currentSurface = TwitterSurfaceTheme.LIGHT))
     }
 
     @Test
@@ -92,11 +141,13 @@ class TwitterWebEngineTest {
     fun webAssetsRespectLineCeilingsAndCoreEngineContracts() {
         val assetsDir = resolveAssetsDir()
         val interceptor = File(assetsDir, "twitter-interceptor.js").readText()
+        val theme = File(assetsDir, "twitter-theme.js").readText()
         val features = File(assetsDir, "twitter-features.js").readText()
         val dom = File(assetsDir, "twitter-dom.js").readText()
         val css = File(assetsDir, "twitter-clean.css").readText()
 
         assertTrue("twitter-interceptor.js exceeds 450 lines", interceptor.lines().size <= 450)
+        assertTrue("twitter-theme.js exceeds 450 lines", theme.lines().size <= 450)
         assertTrue("twitter-features.js exceeds 450 lines", features.lines().size <= 450)
         assertTrue("twitter-dom.js exceeds 450 lines", dom.lines().size <= 450)
         assertTrue("twitter-clean.css exceeds 450 lines", css.lines().size <= 450)
@@ -110,6 +161,14 @@ class TwitterWebEngineTest {
         assertFalse(interceptor.contains("videoListCache"))
         assertFalse(interceptor.contains("__TW_STATS__"))
 
+        // Theme engine contracts
+        assertTrue(theme.contains("prefers-color-scheme"))
+        assertTrue(theme.contains("__twNotifyColorSchemeChange"))
+        assertTrue(theme.contains("syncSurfaceStyleSheet"))
+        assertTrue(theme.contains("syncDrawerThemeBars"))
+        assertTrue(theme.contains("setThemeMode"))
+        assertTrue(theme.contains("setAutoDarkVariant"))
+
         // Feature engine contracts
         assertTrue(features.contains("window.__TW_FEATURES__"))
         assertTrue(features.contains("getCfg().disableVideoAutoplay"))
@@ -120,11 +179,14 @@ class TwitterWebEngineTest {
         assertTrue(dom.contains("[role='menuitem'] span"))
         assertTrue(dom.contains("Math.hypot"))
         assertTrue(dom.contains("delete svg.dataset.twLogoChecked"))
+        assertTrue(dom.contains("twSurfaceOverride"))
         assertFalse(dom.contains("openSettingsWithHaptic?.() ??"))
 
         // CSS contracts
         assertTrue(css.contains("removeBookmark"))
         assertTrue(css.contains("FloatingActionButtons_Tweet_Button"))
+        assertTrue(css.contains(".tw-mod-theme-bar"))
+        assertTrue(css.contains(".tw-mod-dark-subrow"))
         assertTrue(css.contains("[role=\"group\"] > div:has(> a[href*=\"/analytics\"])"))
     }
 

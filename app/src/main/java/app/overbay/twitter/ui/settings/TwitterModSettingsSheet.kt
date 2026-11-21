@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -49,7 +48,9 @@ import androidx.compose.ui.unit.dp
 import app.overbay.twitter.R
 import app.overbay.twitter.model.DetectedHomeFeed
 import app.overbay.twitter.model.SessionFilterStats
+import app.overbay.twitter.model.TwitterDarkVariant
 import app.overbay.twitter.model.TwitterModConfig
+import app.overbay.twitter.model.TwitterThemeMode
 import app.overbay.twitter.ui.theme.TwitterBlue
 
 /**
@@ -63,6 +64,8 @@ fun TwitterModSettingsSheet(
     sessionStats: SessionFilterStats,
     pendingReload: Boolean,
     onSelectDefaultFeed: (String) -> Unit,
+    onSelectThemeMode: (TwitterThemeMode) -> Unit,
+    onSelectAutoDarkVariant: (TwitterDarkVariant) -> Unit,
     onToggleFeedVisibility: (DetectedHomeFeed, Boolean) -> Unit,
     onMoveFeed: (String, Int) -> Unit,
     onUpdate: ((TwitterModConfig) -> TwitterModConfig) -> Unit,
@@ -94,25 +97,12 @@ fun TwitterModSettingsSheet(
     }
 
     if (confirmReset) {
-        AlertDialog(
-            onDismissRequest = { confirmReset = false },
-            title = { Text("Reset Mod Settings?") },
-            text = {
-                Text("This restores all default toggles and clears your custom feed order and muted rules.")
+        ResetDefaultsDialog(
+            onConfirm = {
+                confirmReset = false
+                onResetDefaults()
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmReset = false
-                    onResetDefaults()
-                }) {
-                    Text("Reset")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmReset = false }) {
-                    Text("Cancel")
-                }
-            }
+            onDismiss = { confirmReset = false }
         )
     }
 
@@ -213,8 +203,13 @@ fun TwitterModSettingsSheet(
                         title = "Classic Twitter Branding",
                         subtitle = "Restore Larry the Bird, #1DA1F2 blue accents, and Tweet / Retweet labels.",
                         checked = config.classicTwitterBranding,
-                        onCheckedChange = { checked -> onUpdate { it.copy(classicTwitterBranding = checked) } },
-                        showDivider = false
+                        onCheckedChange = { checked -> onUpdate { it.copy(classicTwitterBranding = checked) } }
+                    )
+                    ThemeModeRow(
+                        selectedMode = config.themeMode,
+                        selectedAutoDarkVariant = config.autoDarkVariant,
+                        onSelect = onSelectThemeMode,
+                        onSelectAutoDarkVariant = onSelectAutoDarkVariant
                     )
                 }
 

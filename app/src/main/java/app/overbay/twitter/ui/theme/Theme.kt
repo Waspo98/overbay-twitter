@@ -6,6 +6,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import app.overbay.twitter.model.TwitterDarkVariant
+import app.overbay.twitter.model.TwitterThemeMode
 
 val TwitterBlue = Color(0xFF1DA1F2)
 val TwitterBlueDark = Color(0xFF1A8CD8)
@@ -13,10 +15,10 @@ val TwitterBlueDark = Color(0xFF1A8CD8)
 /**
  * Mirrors X's three built-in visual surfaces: Default (Light), Dim (#15202B), and Lights Out (#000000).
  */
-enum class TwitterSurfaceTheme {
-    LIGHT,
-    DIM,
-    LIGHTS_OUT;
+enum class TwitterSurfaceTheme(val backgroundColorInt: Int) {
+    LIGHT(0xFFFFFFFF.toInt()),
+    DIM(0xFF15202B.toInt()),
+    LIGHTS_OUT(0xFF000000.toInt());
 
     val isLight: Boolean get() = this == LIGHT
 
@@ -30,6 +32,31 @@ enum class TwitterSurfaceTheme {
                 luma > 128.0 -> LIGHT
                 b - r >= 12 -> DIM
                 else -> LIGHTS_OUT
+            }
+        }
+    }
+}
+
+/**
+ * Resolves the startup shell/WebView background color for [TwitterThemeMode], avoiding stale
+ * light/dark mismatches when following the device theme across day/night transitions.
+ */
+fun TwitterThemeMode.resolveInitialColorInt(
+    lastColorInt: Int?,
+    isSystemDark: Boolean,
+    autoDarkVariant: TwitterDarkVariant = TwitterDarkVariant.LIGHTS_OUT
+): Int {
+    return when (this) {
+        TwitterThemeMode.LIGHT -> TwitterSurfaceTheme.LIGHT.backgroundColorInt
+        TwitterThemeMode.DIM -> TwitterSurfaceTheme.DIM.backgroundColorInt
+        TwitterThemeMode.LIGHTS_OUT -> TwitterSurfaceTheme.LIGHTS_OUT.backgroundColorInt
+        TwitterThemeMode.AUTO -> {
+            if (!isSystemDark) {
+                TwitterSurfaceTheme.LIGHT.backgroundColorInt
+            } else if (autoDarkVariant == TwitterDarkVariant.DIM) {
+                TwitterSurfaceTheme.DIM.backgroundColorInt
+            } else {
+                TwitterSurfaceTheme.LIGHTS_OUT.backgroundColorInt
             }
         }
     }

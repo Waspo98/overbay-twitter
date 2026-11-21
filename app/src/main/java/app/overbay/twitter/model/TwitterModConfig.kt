@@ -16,6 +16,38 @@ data class SessionFilterStats(
 }
 
 /**
+ * Controls how the app and embedded X/Twitter surface theme behave.
+ */
+@Serializable
+enum class TwitterThemeMode(val label: String, val shortLabel: String) {
+    AUTO("Follow Device", "Auto"),
+    LIGHT("Light", "Light"),
+    DIM("Dim", "Dim"),
+    LIGHTS_OUT("Lights Out", "Lights Out");
+
+    companion object {
+        fun fromWireValue(raw: String?): TwitterThemeMode {
+            return entries.firstOrNull { it.name.equals(raw?.trim(), ignoreCase = true) } ?: AUTO
+        }
+    }
+}
+
+/**
+ * Dark palette variant used when [TwitterThemeMode.AUTO] is active in system dark mode.
+ */
+@Serializable
+enum class TwitterDarkVariant(val label: String) {
+    DIM("Dim"),
+    LIGHTS_OUT("Lights Out");
+
+    companion object {
+        fun fromWireValue(raw: String?): TwitterDarkVariant {
+            return entries.firstOrNull { it.name.equals(raw?.trim(), ignoreCase = true) } ?: LIGHTS_OUT
+        }
+    }
+}
+
+/**
  * Controls how verification checkmarks render across timelines, profiles, and replies.
  */
 @Serializable
@@ -88,6 +120,8 @@ data class DetectedHomeFeed(
 data class TwitterModConfig(
     // 1. Branding & Identity
     val classicTwitterBranding: Boolean = true,
+    val themeMode: TwitterThemeMode = TwitterThemeMode.AUTO,
+    val autoDarkVariant: TwitterDarkVariant = TwitterDarkVariant.LIGHTS_OUT,
 
     // 2. Ads, Grok & Upsells
     val blockAds: Boolean = true,
