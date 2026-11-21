@@ -70,10 +70,19 @@ class TwitterAssetBundle private constructor(
             }
         }
 
-        fun preloadAsync(context: Context, executor: Executor) {
-            if (cached != null) return
+        fun preloadAsync(context: Context, executor: Executor, onComplete: () -> Unit = {}) {
+            if (cached != null) {
+                onComplete()
+                return
+            }
             val appContext = context.applicationContext
-            executor.execute { runCatching { getInstance(appContext) } }
+            executor.execute {
+                try {
+                    runCatching { getInstance(appContext) }
+                } finally {
+                    onComplete()
+                }
+            }
         }
 
         private fun loadFromAssets(context: Context): TwitterAssetBundle {

@@ -108,6 +108,7 @@ class TwitterWebEngineTest {
 
         assertTrue(TwitterRequestBlocker.isJsonTelemetryUrl("https://x.com/i/api/1.1/jot/client_event.json"))
         assertTrue(TwitterRequestBlocker.isJsonTelemetryUrl("https://x.com/i/api/2/client_event.json"))
+        assertTrue(TwitterRequestBlocker.isJsonTelemetryUrl("https://x.com/i/api/1.1/branch/init.json"))
         assertTrue(TwitterRequestBlocker.isJsonTelemetryUrl("https://x.com/i/api/graphql/abc/ClientEvent"))
         assertFalse(TwitterRequestBlocker.isJsonTelemetryUrl("https://analytics.twitter.com/i/adsct"))
 
@@ -117,6 +118,23 @@ class TwitterWebEngineTest {
         assertFalse(TwitterRequestBlocker.shouldBlockGrokApi("https://x.com/i/api/graphql/xyz/SearchTimeline?variables=%7B%22rawQuery%22%3A%22grok%22%7D"))
         assertFalse(TwitterRequestBlocker.shouldBlockGrokApi("https://x.com/i/api/graphql/xyz/HomeTimeline"))
         assertFalse(TwitterRequestBlocker.shouldBlockGrokApi("https://example.com/i/api/graphql/xyz/GrokHome"))
+
+        assertEquals(
+            TwitterRequestBlocker.BlockDecision.ALLOW,
+            TwitterRequestBlocker.classifyRequest("https://pbs.twimg.com/media/abc.jpg", blockAds = true, removeGrok = true)
+        )
+        assertEquals(
+            TwitterRequestBlocker.BlockDecision.BLOCK_TELEMETRY,
+            TwitterRequestBlocker.classifyRequest("https://x.com/i/api/1.1/branch/init.json", blockAds = true, removeGrok = true)
+        )
+        assertEquals(
+            TwitterRequestBlocker.BlockDecision.BLOCK_GROK,
+            TwitterRequestBlocker.classifyRequest("https://x.com/i/api/graphql/abc/GrokHome", blockAds = true, removeGrok = true)
+        )
+        assertEquals(
+            TwitterRequestBlocker.BlockDecision.ALLOW,
+            TwitterRequestBlocker.classifyRequest("https://x.com/i/api/graphql/abc/GrokHome", blockAds = true, removeGrok = false)
+        )
     }
 
     @Test
@@ -253,14 +271,30 @@ class TwitterWebEngineTest {
         assertTrue(interceptor.contains("url.includes(\"Bookmarks\")"))
         assertTrue(interceptor.contains("raw.includes(\"video_info\")"))
         assertTrue(interceptor.contains("createLazyJsonResponse"))
+        assertTrue(interceptor.contains("cleanResponseHeaders"))
         assertFalse(interceptor.contains("videoListCache"))
         assertFalse(interceptor.contains("__TW_STATS__"))
+        val nonTimelineGqlPattern = Regex("""NON_TIMELINE_GQL_RE\s*=\s*/(.+)/i;""")
+            .find(interceptor)?.groupValues?.get(1)
+            ?: throw AssertionError("Missing NON_TIMELINE_GQL_RE in twitter-interceptor.js")
+        val nonTimelineGqlRe = Regex(nonTimelineGqlPattern, RegexOption.IGNORE_CASE)
+        assertTrue(nonTimelineGqlRe.containsMatchIn("https://x.com/i/api/graphql/abc/FavoriteTweet"))
+        assertTrue(nonTimelineGqlRe.containsMatchIn("https://x.com/i/api/graphql/abc/CreateTweet"))
+        assertTrue(nonTimelineGqlRe.containsMatchIn("https://x.com/i/api/graphql/abc/GrokHome"))
+        assertFalse(nonTimelineGqlRe.containsMatchIn("https://x.com/i/api/graphql/abc/Followers"))
+        assertFalse(nonTimelineGqlRe.containsMatchIn("https://x.com/i/api/graphql/abc/Following"))
+        assertFalse(nonTimelineGqlRe.containsMatchIn("https://x.com/i/api/graphql/abc/FollowersYouKnow"))
+        assertFalse(nonTimelineGqlRe.containsMatchIn("https://x.com/i/api/graphql/abc/ExploreSidebar"))
+        assertFalse(nonTimelineGqlRe.containsMatchIn("https://x.com/i/api/graphql/abc/MutedUsers"))
+        assertFalse(nonTimelineGqlRe.containsMatchIn("https://x.com/i/api/graphql/abc/BlockedUsers"))
 
         // Theme engine contracts
         assertTrue(theme.contains("prefers-color-scheme"))
         assertTrue(theme.contains("__twNotifyColorSchemeChange"))
         assertTrue(theme.contains("syncSurfaceStyleSheet"))
         assertTrue(theme.contains("scannedCounts"))
+        assertTrue(theme.contains("emittedSelectors"))
+        assertTrue(theme.contains("currentCssParts"))
         assertTrue(theme.contains("syncDrawerThemeBars"))
         assertTrue(theme.contains("setThemeMode"))
         assertTrue(theme.contains("setAutoDarkVariant"))
@@ -270,6 +304,15 @@ class TwitterWebEngineTest {
         assertTrue(features.contains("getCfg().disableVideoAutoplay"))
         assertFalse(features.contains("aria-labelledby=\"modal-header\""))
         assertTrue(features.contains("[data-testid=\"UserName\"]"))
+        val nonProfilePattern = Regex("""NON_PROFILE_PATH_RE\s*=\s*/(.+)/i;""")
+            .find(features)?.groupValues?.get(1)
+            ?: throw AssertionError("Missing NON_PROFILE_PATH_RE in twitter-features.js")
+        val nonProfileRe = Regex(nonProfilePattern, RegexOption.IGNORE_CASE)
+        assertTrue(nonProfileRe.containsMatchIn("/home"))
+        assertTrue(nonProfileRe.containsMatchIn("/i/bookmarks"))
+        assertTrue(nonProfileRe.containsMatchIn("/i/lists/12345"))
+        assertFalse(nonProfileRe.containsMatchIn("/jack"))
+        assertFalse(nonProfileRe.containsMatchIn("/jack/status/123"))
 
         // Viewport & location-restore engine contracts
         assertTrue(viewport.contains("window.__TW_VIEWPORT__"))

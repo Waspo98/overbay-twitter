@@ -53,15 +53,26 @@ object TwitterRequestBlocker {
     private val mobileBeforeSafariRegex = Regex("""\s+Mobile(?=\s+Safari/)""")
     private val mobileWordRegex = Regex("""\bMobile\b""")
 
+    enum class BlockDecision {
+        ALLOW,
+        BLOCK_TELEMETRY,
+        BLOCK_GROK
+    }
+
     /**
-     * Evaluates telemetry/ad URLs on Chromium's IO thread without allocating URI or substring objects.
+     * Classifies ad/telemetry and Grok API URLs in a single zero-allocation pass on Chromium's IO thread.
      */
-    fun shouldBlockTelemetryOrAd(urlString: String): Boolean {
+    fun classifyRequest(
+        urlString: String,
+        blockAds: Boolean,
+        removeGrok: Boolean
+    ): BlockDecision {
+        if (!blockAds && !removeGrok) return BlockDecision.ALLOW
         val schemeSep = urlString.indexOf("://")
-        if (schemeSep <= 0) return false
+        if (schemeSep <= 0) return BlockDecision.ALLOW
         val hostStart = schemeSep + 3
         val len = urlString.length
-        if (hostStart >= len) return false
+        if (hostStart >= len) return BlockDecision.ALLOW
 
         var pathStart = len
         var pathEnd = len
@@ -83,22 +94,61 @@ object TwitterRequestBlocker {
                 break
             }
         }
-        if (hostEnd <= hostStart) return false
+        if (hostEnd <= hostStart) return BlockDecision.ALLOW
 
         for (cdn in fastPassCdnDomains) {
-            if (regionMatchesDomain(urlString, hostStart, hostEnd, cdn)) return false
-        }
-        for (blocked in blockedHosts) {
-            if (regionMatchesDomain(urlString, hostStart, hostEnd, blocked)) return true
+            if (regionMatchesDomain(urlString, hostStart, hostEnd, cdn)) return BlockDecision.ALLOW
         }
 
         val pathLen = pathEnd - pathStart
-        if (pathLen <= 1) return false
-        for (frag in blockedPathFragments) {
-            val idx = urlString.indexOf(frag, startIndex = pathStart, ignoreCase = true)
-            if (idx >= pathStart && idx + frag.length <= pathEnd) return true
+        if (blockAds) {
+            for (blocked in blockedHosts) {
+                if (regionMatchesDomain(urlString, hostStart, hostEnd, blocked)) {
+                    return BlockDecision.BLOCK_TELEMETRY
+                }
+            }
+            if (pathLen > 1) {
+                for (frag in blockedPathFragments) {
+                    val idx = urlString.indexOf(frag, startIndex = pathStart, ignoreCase = true)
+                    if (idx >= pathStart && idx + frag.length <= pathEnd) {
+                        return BlockDecision.BLOCK_TELEMETRY
+                    }
+                }
+            }
         }
-        return false
+
+        if (removeGrok && pathLen >= 12) {
+            var isInternal = false
+            for (h in internalHosts) {
+                if (regionMatchesDomain(urlString, hostStart, hostEnd, h)) {
+                    isInternal = true
+                    break
+                }
+            }
+            if (isInternal) {
+                if (urlString.regionMatches(pathStart, "/i/api/2/grok/", 0, 14, ignoreCase = true)) {
+                    return BlockDecision.BLOCK_GROK
+                }
+                val gqlPrefix = "/i/api/graphql/"
+                if (urlString.regionMatches(pathStart, gqlPrefix, 0, gqlPrefix.length, ignoreCase = true)) {
+                    val opSlash = urlString.indexOf('/', startIndex = pathStart + gqlPrefix.length)
+                    if (opSlash >= 0 && opSlash + 5 <= pathEnd &&
+                        urlString.regionMatches(opSlash + 1, "Grok", 0, 4, ignoreCase = true)
+                    ) {
+                        return BlockDecision.BLOCK_GROK
+                    }
+                }
+            }
+        }
+
+        return BlockDecision.ALLOW
+    }
+
+    /**
+     * Evaluates telemetry/ad URLs on Chromium's IO thread without allocating URI or substring objects.
+     */
+    fun shouldBlockTelemetryOrAd(urlString: String): Boolean {
+        return classifyRequest(urlString, blockAds = true, removeGrok = false) == BlockDecision.BLOCK_TELEMETRY
     }
 
     fun isBlockedHost(host: String): Boolean {
@@ -202,52 +252,13 @@ object TwitterRequestBlocker {
     }
 
     fun shouldBlockGrokApi(urlString: String): Boolean {
-        val schemeSep = urlString.indexOf("://")
-        if (schemeSep <= 0) return false
-        val hostStart = schemeSep + 3
-        val len = urlString.length
-        if (hostStart >= len) return false
-
-        var pathStart = len
-        var pathEnd = len
-        for (i in hostStart until len) {
-            val ch = urlString[i]
-            if (ch == '/' && pathStart == len) {
-                pathStart = i
-            } else if (ch == '?' || ch == '#') {
-                pathEnd = i
-                if (pathStart == len) pathStart = i
-                break
-            }
-        }
-        var hostEnd = pathStart
-        for (i in hostStart until pathStart) {
-            if (urlString[i] == ':') {
-                hostEnd = i
-                break
-            }
-        }
-        if (hostEnd <= hostStart || pathEnd - pathStart < 12) return false
-        var isInternal = false
-        for (h in internalHosts) {
-            if (regionMatchesDomain(urlString, hostStart, hostEnd, h)) {
-                isInternal = true
-                break
-            }
-        }
-        if (!isInternal) return false
-
-        if (urlString.regionMatches(pathStart, "/i/api/2/grok/", 0, 14, ignoreCase = true)) return true
-        val gqlPrefix = "/i/api/graphql/"
-        if (!urlString.regionMatches(pathStart, gqlPrefix, 0, gqlPrefix.length, ignoreCase = true)) return false
-        val opSlash = urlString.indexOf('/', startIndex = pathStart + gqlPrefix.length)
-        if (opSlash < 0 || opSlash + 5 > pathEnd) return false
-        return urlString.regionMatches(opSlash + 1, "Grok", 0, 4, ignoreCase = true)
+        return classifyRequest(urlString, blockAds = false, removeGrok = true) == BlockDecision.BLOCK_GROK
     }
 
     fun isJsonTelemetryUrl(urlString: String): Boolean {
         return urlString.contains("/jot/", ignoreCase = true) ||
             urlString.contains("/client_event", ignoreCase = true) ||
+            urlString.contains("/branch/", ignoreCase = true) ||
             urlString.contains("/ClientEvent", ignoreCase = true)
     }
 

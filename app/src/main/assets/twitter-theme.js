@@ -74,6 +74,9 @@
 
     let activeSurfaceMode = "";
     let scannedCounts = new WeakMap();
+    let scannedRules = new WeakSet();
+    let emittedSelectors = new Set();
+    let currentCssParts = [];
     let hasMatchedSurfaceRules = false;
     let lastSurfaceScanAt = 0;
     let surfaceIdleHandle = 0;
@@ -107,34 +110,43 @@
         if (reset) {
             activeSurfaceMode = overrideMode;
             scannedCounts = new WeakMap();
+            scannedRules = new WeakSet();
+            emittedSelectors = new Set();
+            currentCssParts = [];
             hasMatchedSurfaceRules = false;
         }
         const prefix = `html[data-tw-surface-override="${overrideMode}"]`;
         const buckets = { base: [], glass: [], elev: [], hover: [], border: [] };
+        let hasNew = false;
         const pushSel = (bucket, selText) => {
             for (const part of selText.split(",")) {
                 const s = part.trim();
                 if (!s || s.includes("tw-mod-")) continue;
-                buckets[bucket].push(/^(html|:root)\b/i.test(s) ? prefix : `${prefix} ${s}`);
+                const fullSel = /^(html|:root)\b/i.test(s) ? prefix : `${prefix} ${s}`;
+                const key = `${bucket}\u0000${fullSel}`;
+                if (emittedSelectors.has(key)) continue;
+                emittedSelectors.add(key);
+                buckets[bucket].push(fullSel);
+                hasNew = true;
             }
         };
-        let hasNew = false;
         for (const sheet of document.styleSheets) {
             if (sheet.ownerNode?.dataset?.twOwn) continue;
             let rules;
             try { rules = sheet.cssRules; } catch (_) { continue; }
-            const prev = reset ? 0 : (scannedCounts.get(sheet) || 0);
-            if (rules.length <= prev) continue;
+            const prev = reset ? -1 : (scannedCounts.get(sheet) ?? -1);
+            if (!reset && rules.length === prev) continue;
             scannedCounts.set(sheet, rules.length);
-            for (let i = prev; i < rules.length; i++) {
+            for (let i = 0; i < rules.length; i++) {
                 const rule = rules[i];
+                if (!reset && scannedRules.has(rule)) continue;
+                scannedRules.add(rule);
                 if (rule.type !== 1 || !rule.selectorText || !rule.style) continue;
                 const bgTok = classifyColorToken(rule.style.backgroundColor, overrideMode);
-                if (bgTok && bgTok !== "border") { pushSel(bgTok, rule.selectorText); hasNew = true; }
+                if (bgTok && bgTok !== "border") pushSel(bgTok, rule.selectorText);
                 for (const prop of ["borderColor", "borderTopColor", "borderBottomColor", "borderLeftColor", "borderRightColor"]) {
                     if (classifyColorToken(rule.style[prop], overrideMode) === "border") {
                         pushSel("border", rule.selectorText);
-                        hasNew = true;
                         break;
                     }
                 }
@@ -160,16 +172,19 @@
             mount.appendChild(styleEl);
         }
         if (reset) {
-            const css = newRules.join("\n");
-            if (styleEl.textContent !== css) styleEl.textContent = css;
+            currentCssParts = newRules.slice();
+            styleEl.textContent = currentCssParts.join("\n");
         } else {
             const targetSheet = styleEl.sheet;
+            let insertFailed = !targetSheet;
             for (const ruleCss of newRules) {
-                if (targetSheet) {
-                    try { targetSheet.insertRule(ruleCss, targetSheet.cssRules.length); continue; } catch (_) {}
+                currentCssParts.push(ruleCss);
+                if (!insertFailed) {
+                    try { targetSheet.insertRule(ruleCss, targetSheet.cssRules.length); }
+                    catch (_) { insertFailed = true; }
                 }
-                styleEl.appendChild(document.createTextNode("\n" + ruleCss));
             }
+            if (insertFailed) styleEl.textContent = currentCssParts.join("\n");
         }
     }
 

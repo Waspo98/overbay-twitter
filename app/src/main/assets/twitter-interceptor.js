@@ -10,7 +10,7 @@
     const TRACKING_RE = /(?:^|[?&])(?:utm_|fbclid=|gclid=|dclid=|msclkid=|mc_|igsh|_hs|vero_id=|mkt_tok=)/i;
     const SKIP_WALK_KEYS = new Set(["legacy", "entities", "extended_entities", "video_info", "sizes", "features", "professional", "affiliates_highlighted_label", "clientEventInfo", "feedbackInfo", "promotedMetadata", "unmention_data", "edit_control", "views", "quick_promote_eligibility", "card", "birdwatch_pivot", "ext", "mediaStats", "original_info", "additional_media_info", "ext_media_availability", "superFollowsReplyUserResult", "grok_analysis_button", "grok_share_attachment", "color", "palette", "focus_rects"]);
     const CAROUSEL_PREFIXES = ["who-to-follow-", "who-to-subscribe-", "communities-to-join-", "topics-to-follow-", "creator-subscriptions-", "inline-prompt-", "relevance-prompt-", "list-to-follow-", "connect-", "suggested-"];
-    const NON_TIMELINE_GQL_RE = /\/i\/api\/graphql\/[^/?]+\/(Favorite|Unfavorite|CreateBookmark|DeleteBookmark|CreateRetweet|DeleteRetweet|CreateTweet|DeleteTweet|Follow|Unfollow|Mute|Unmute|Block|Unblock|PinTweet|UnpinTweet|MarkRead|UpdateProfile|DataSaver|BadgeCount|PutClientEducationFlag|SubscribeTo|UnsubscribeFrom|ClientEvent|AccountBalance|ViewerSettings|Grok|AudioSpace|Subscriptions|Premium|Sidebar|Typeahead|Hashflags)/i;
+    const NON_TIMELINE_GQL_RE = /\/i\/api\/graphql\/[^/?]+\/(Favorite|Unfavorite|CreateBookmark|DeleteBookmark|CreateRetweet|DeleteRetweet|CreateTweet|DeleteTweet|Follow(?!(?:ers|ing))|Unfollow|Mute(?!d)|Unmute|Block(?!ed)|Unblock|PinTweet|UnpinTweet|MarkRead|UpdateProfile|DataSaver|BadgeCount|PutClientEducationFlag|SubscribeTo|UnsubscribeFrom|ClientEvent|AccountBalance|ViewerSettings|Grok|AudioSpace|Subscriptions|Premium|Typeahead|Hashflags)/i;
     const SKIP_API2_RE = /\/i\/api\/2\/(badge_count|live_pipeline|notifications\/view|dm\/|client_event|onboarding|keyregistry|fleets|hashflags|grok\/)/i;
 
     function lruSet(map, key, value, max) {
@@ -325,21 +325,23 @@
         return { parsed, mutated: processPayloadObject(url, parsed).mutated };
     }
 
+    const cleanResponseHeaders = (raw) => { const h = new Headers(raw); h.delete("content-length"); h.delete("content-encoding"); return h; };
+
     function createLazyJsonResponse(response, reqUrl, rawText, parsed, mutated) {
-        let used = false, cachedText = mutated ? null : rawText, cachedBody = null;
-        const headers = new Headers(response.headers);
-        if (mutated) { headers.delete("content-length"); headers.delete("content-encoding"); }
+        let used = false, cachedText = mutated ? null : rawText, cachedResp = null;
+        const headers = cleanResponseHeaders(response.headers);
         const init = { status: response.status, statusText: response.statusText, headers };
         const out = new Response(null, init), url = response.url || reqUrl || "";
         const getText = () => (cachedText === null ? (cachedText = JSON.stringify(parsed)) : cachedText);
-        const read = (fn) => used ? Promise.reject(new TypeError("Body has already been consumed")) : ((used = true), Promise.resolve(fn()));
+        const isUsed = () => used || Boolean(cachedResp?.bodyUsed || cachedResp?.body?.locked);
+        const read = (fn) => isUsed() ? Promise.reject(new TypeError("Body has already been consumed")) : ((used = true), Promise.resolve(fn()));
         Object.defineProperties(out, {
-            url: { value: url }, bodyUsed: { get: () => used }, body: { get: () => (cachedBody || (cachedBody = new Response(getText(), init).body)) },
+            url: { value: url }, bodyUsed: { get: isUsed }, body: { get: () => (cachedResp || (cachedResp = new Response(getText(), init))).body },
             json: { value: () => read(() => parsed) }, text: { value: () => read(getText) },
             arrayBuffer: { value: () => read(() => new TextEncoder().encode(getText()).buffer) },
             bytes: { value: () => read(() => new TextEncoder().encode(getText())) },
             blob: { value: () => read(() => new Blob([getText()], { type: headers.get("content-type") || "application/json" })) },
-            clone: { value: () => { if (used) throw new TypeError("Body has already been consumed"); const c = new Response(getText(), init); if (url) try { Object.defineProperty(c, "url", { value: url }); } catch (_) {} return c; } }
+            clone: { value: () => { if (isUsed()) throw new TypeError("Body has already been consumed"); const c = new Response(getText(), init); if (url) try { Object.defineProperty(c, "url", { value: url }); } catch (_) {} return c; } }
         });
         return out;
     }
@@ -357,12 +359,12 @@
                 rawText = await response.text();
                 const { parsed, mutated } = parseAndProcessPayload(reqUrl, rawText);
                 if (parsed !== null) return createLazyJsonResponse(response, reqUrl, rawText, parsed, mutated);
-                const out = new Response(rawText, { status: response.status, statusText: response.statusText, headers: response.headers });
+                const out = new Response(rawText, { status: response.status, statusText: response.statusText, headers: cleanResponseHeaders(response.headers) });
                 if (response.url || reqUrl) try { Object.defineProperty(out, "url", { value: response.url || reqUrl }); } catch (_) {}
                 return out;
             } catch (_) {
                 const isNullBody = response.status === 204 || response.status === 205 || response.status === 304;
-                return rawText !== null ? new Response(isNullBody ? null : rawText, { status: response.status, statusText: response.statusText, headers: response.headers }) : response;
+                return rawText !== null ? new Response(isNullBody ? null : rawText, { status: response.status, statusText: response.statusText, headers: cleanResponseHeaders(response.headers) }) : response;
             }
         };
     }

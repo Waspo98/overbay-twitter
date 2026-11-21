@@ -123,15 +123,19 @@ internal class TwitterWebViewClient(
         val cfg = configRef.get()
         if (!cfg.blockAds && !cfg.removeGrok) return super.shouldInterceptRequest(view, request)
         val urlString = request.url.toString()
-        val blockTelemetry = cfg.blockAds && TwitterRequestBlocker.shouldBlockTelemetryOrAd(urlString)
-        val blockGrok = !blockTelemetry && cfg.removeGrok && TwitterRequestBlocker.shouldBlockGrokApi(urlString)
-        if (blockTelemetry || blockGrok) {
+        val decision = TwitterRequestBlocker.classifyRequest(
+            urlString = urlString,
+            blockAds = cfg.blockAds,
+            removeGrok = cfg.removeGrok
+        )
+        if (decision != TwitterRequestBlocker.BlockDecision.ALLOW) {
             val origin = request.requestHeaders?.entries
                 ?.firstOrNull { it.key.equals("Origin", ignoreCase = true) }
                 ?.value
             return TwitterRequestBlocker.emptyJsonResponse(
                 origin = origin,
-                isJsonEndpoint = blockGrok || TwitterRequestBlocker.isJsonTelemetryUrl(urlString)
+                isJsonEndpoint = decision == TwitterRequestBlocker.BlockDecision.BLOCK_GROK ||
+                    TwitterRequestBlocker.isJsonTelemetryUrl(urlString)
             )
         }
         return super.shouldInterceptRequest(view, request)

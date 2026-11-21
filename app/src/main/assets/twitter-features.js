@@ -11,7 +11,7 @@
     ]);
     const EXTERNAL_SKIP_RE = /^https?:\/\/([^/]+\.)?(x|twitter)\.com\//i;
     const HANDLE_FALLBACK_RE = /@([A-Za-z0-9_]{1,15})/;
-    const NON_PROFILE_PATH_RE = /^\/(home|explore|search|notifications|messages|compose|settings|i\/)(?:\/|$)/i;
+    const NON_PROFILE_PATH_RE = /^\/(home|explore|search|notifications|messages|compose|settings|i)(?:\/|$)/i;
     const PROFILE_LINK_SELECTOR = '[data-testid="UserDescription"] a[href^="http"], [data-testid="UserProfileHeader_Items"] a[href^="http"], [data-testid="UserUrl"] a[href^="http"]';
 
     let hasAppliedInitialDefault = false;
