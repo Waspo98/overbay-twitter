@@ -412,6 +412,7 @@ class TwitterWebEngineTest {
         assertTrue(css.contains("--tw-chrome-dur"))
         assertTrue(css.contains("--tw-top-hdr-h"))
         assertTrue(css.contains("transform: translate3d(0, calc(-1 * var(--tw-top-hdr-h, 0px)), 0);"))
+        assertTrue(css.contains("transform: translate3d(0, 0, 0) !important;"))
         assertTrue(css.contains("data-tw-top-bar-mask=\"true\""))
         assertTrue(css.contains("overflow: clip !important;"))
         assertTrue(css.contains("data-tw-top-bar-autohide=\"true\""))

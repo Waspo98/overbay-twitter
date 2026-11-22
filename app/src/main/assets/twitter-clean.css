@@ -279,7 +279,7 @@ html[data-tw-top-inset="true"] [data-tw-top-bar-clear-pad="true"] {
     padding-top: 0px !important;
 }
 html[data-tw-top-inset="true"] [data-tw-top-bar-reset-tf="true"] {
-    transform: none !important;
+    transform: translate3d(0, 0, 0) !important;
     transition: none !important;
     opacity: 1 !important;
 }

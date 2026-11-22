@@ -262,6 +262,8 @@
                     if (nextHideEl.getAttribute("data-tw-top-bar-masked") !== maskedFlag) nextHideEl.setAttribute("data-tw-top-bar-masked", maskedFlag);
                     for (const c of hostChain) if (c !== nextHideEl) nextResetTfEls.push(c);
                 }
+            } else if (getComputedStyle(posHost).position === "fixed") {
+                nextResetTfEls.push(posHost);
             }
         }
 
