@@ -3,6 +3,7 @@
     window.__TW_FEATURES_INSTALLED__ = true;
 
     const DOWNLOAD_PATH = "M12 16l-5-5 1.41-1.41L11 12.17V4h2v8.17l2.59-2.58L17 11l-5 5zm-7 2h14v2H5v-2z";
+    const CAMERA_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6.5Q2.75 6.5 2.75 8.75v8.5Q2.75 19.5 5 19.5h14q2.25 0 2.25-2.25v-8.5Q21.25 6.5 19 6.5h-2.8L15 4.5H9L7.8 6.5Z"/><circle cx="12" cy="13" r="3.4"/></svg>';
     const SUGGESTED_FEEDS = new Set([
         "nfl", "nba", "nhl", "mlb", "baseball", "college football", "cfb", "soccer",
         "trending", "news", "sports", "entertainment", "gaming", "technology", "politics",
@@ -46,16 +47,17 @@
         return out;
     }
 
-    function createIconBtn(cls, label, onClick) {
+    function createIconBtn(cls, label, onClick, svgHtml = `<svg viewBox="0 0 24 24"><path d="${DOWNLOAD_PATH}"></path></svg>`) {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = cls;
         btn.dataset.twOwn = "1";
         btn.setAttribute("aria-label", label);
-        btn.innerHTML = `<svg viewBox="0 0 24 24"><path d="${DOWNLOAD_PATH}"></path></svg>`;
+        btn.innerHTML = svgHtml;
         btn.addEventListener("click", (e) => {
             e.preventDefault();
             e.stopPropagation();
+            btn.blur?.();
             onClick();
         });
         return btn;
@@ -215,7 +217,7 @@
             if (!r.isConnected) continue;
             const host = r.closest?.('article[data-testid="tweet"]');
             if (host) {
-                if (!host.dataset.twEnhanced || r.matches?.('a, video, [data-testid="videoPlayer"], [data-testid="gifPlayer"], [data-testid="icon-verified"]') || r.querySelector?.('a[href^="http"], video, [data-testid="videoPlayer"], [data-testid="gifPlayer"], [data-testid="icon-verified"]')) {
+                if (!host.dataset.twEnhanced || r.matches?.('a, video, [role="group"], [data-testid="videoPlayer"], [data-testid="gifPlayer"], [data-testid="icon-verified"]') || r.querySelector?.('a[href^="http"], video, [role="group"], [data-testid="videoPlayer"], [data-testid="gifPlayer"], [data-testid="icon-verified"]')) {
                     set.add(host);
                 }
                 continue;
@@ -231,11 +233,25 @@
             if (cfg.verifiedBadgeMode === "HIDE_PAID_BLUE") {
                 checkVerifiedBadges(article, article.querySelector('[data-testid="User-Name"]'));
             }
+            const actionGroup = window.__TW_SCREENSHOT__?.findOuterActionGroup?.(article) || article.querySelector('[role="group"]');
             const hasVideo = article.querySelector('video, [data-testid="videoPlayer"], [data-testid="gifPlayer"]');
-            const existingBtn = article.querySelector(".tw-mod-dl-btn");
-            if (cfg.enableVideoDownloader && hasVideo && !existingBtn) {
+            const existingDlBtn = article.querySelector(".tw-mod-dl-btn");
+            const existingShotBtn = article.querySelector(".tw-mod-shot-btn");
+            if (cfg.enableTweetScreenshot !== false && actionGroup && !existingShotBtn) {
+                const shotBtn = createIconBtn("tw-mod-shot-btn", "Screenshot tweet", () => {
+                    window.__TW_SCREENSHOT__?.request?.(article);
+                }, CAMERA_SVG);
+                if (existingDlBtn && existingDlBtn.parentElement === actionGroup) {
+                    actionGroup.insertBefore(shotBtn, existingDlBtn);
+                } else {
+                    actionGroup.appendChild(shotBtn);
+                }
+            } else if (cfg.enableTweetScreenshot === false && existingShotBtn) {
+                existingShotBtn.remove();
+            }
+
+            if (cfg.enableVideoDownloader && hasVideo && !existingDlBtn) {
                 const tweetId = resolveVideoTweetId(article, hasVideo);
-                const actionGroup = article.querySelector('[role="group"]');
                 if (tweetId && actionGroup) {
                     actionGroup.appendChild(createIconBtn("tw-mod-dl-btn", "Download video", () => {
                         const cached = window.__TW_CACHE__?.getVideoUrl(tweetId);
@@ -245,8 +261,8 @@
                         else window.TwitterBridge?.showToast("Video stream not cached yet—tap play once first");
                     }));
                 }
-            } else if (!cfg.enableVideoDownloader && existingBtn) {
-                existingBtn.remove();
+            } else if (!cfg.enableVideoDownloader && existingDlBtn) {
+                existingDlBtn.remove();
             }
 
             for (const a of article.querySelectorAll('a[href^="http"]:not([data-tw-link-bound])')) {

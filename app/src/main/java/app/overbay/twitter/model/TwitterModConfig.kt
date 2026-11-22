@@ -58,6 +58,16 @@ enum class VerifiedBadgeMode(val label: String) {
 }
 
 /**
+ * Visual framing preset used when exporting a formatted tweet screenshot.
+ */
+@Serializable
+enum class TweetScreenshotStyle(val label: String) {
+    CLEAN_CARD("Clean Card"),
+    FRAMED("Framed"),
+    TIGHT("Tight")
+}
+
+/**
  * Classification of tabs appearing in `/home` header `[role="tablist"]`.
  */
 @Serializable
@@ -149,6 +159,9 @@ data class TwitterModConfig(
 
     // 5. Media & Link Enhancements
     val enableVideoDownloader: Boolean = true,
+    val enableTweetScreenshot: Boolean = true,
+    val tweetScreenshotStyle: TweetScreenshotStyle = TweetScreenshotStyle.CLEAN_CARD,
+    val tweetScreenshotIncludeMetrics: Boolean = false,
     val forceOrigQualityImages: Boolean = true,
     val unwrapTcoLinks: Boolean = true,
     val openLinksInCustomTab: Boolean = true,

@@ -40,6 +40,7 @@ import app.overbay.twitter.model.TwitterDarkVariant
 import app.overbay.twitter.model.TwitterThemeMode
 import app.overbay.twitter.ui.settings.LinkActionSheet
 import app.overbay.twitter.ui.settings.OfflineErrorOverlay
+import app.overbay.twitter.ui.settings.TweetScreenshotHost
 import app.overbay.twitter.ui.settings.TwitterModSettingsSheet
 import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
 import app.overbay.twitter.ui.theme.TwitterTheme
@@ -384,12 +385,12 @@ fun TwitterAppScreen(
         }
 
         longPressedLinkUrl?.let { url ->
-            LinkActionSheet(
-                url = url,
-                useCustomTab = config.openLinksInCustomTab,
-                toolbarColor = webThemeColorInt,
-                onDismiss = { longPressedLinkUrl = null }
-            )
+            LinkActionSheet(url = url, useCustomTab = config.openLinksInCustomTab, toolbarColor = webThemeColorInt, onDismiss = { longPressedLinkUrl = null })
         }
+
+        TweetScreenshotHost(
+            activity = activity, controller = controller, config = config,
+            fallbackSurfaceColorInt = webThemeColorInt, onUpdateConfig = repository::updateConfig
+        )
     }
 }

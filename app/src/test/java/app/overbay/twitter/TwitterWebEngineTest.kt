@@ -255,6 +255,7 @@ class TwitterWebEngineTest {
         val assetsDir = resolveAssetsDir()
         val interceptor = File(assetsDir, "twitter-interceptor.js").readText()
         val theme = File(assetsDir, "twitter-theme.js").readText()
+        val screenshot = File(assetsDir, "twitter-screenshot.js").readText()
         val features = File(assetsDir, "twitter-features.js").readText()
         val chrome = File(assetsDir, "twitter-chrome.js").readText()
         val drawer = File(assetsDir, "twitter-drawer.js").readText()
@@ -264,6 +265,7 @@ class TwitterWebEngineTest {
 
         assertTrue("twitter-interceptor.js exceeds 450 lines", interceptor.lines().size <= 450)
         assertTrue("twitter-theme.js exceeds 450 lines", theme.lines().size <= 450)
+        assertTrue("twitter-screenshot.js exceeds 450 lines", screenshot.lines().size <= 450)
         assertTrue("twitter-features.js exceeds 450 lines", features.lines().size <= 450)
         assertTrue("twitter-chrome.js exceeds 450 lines", chrome.lines().size <= 450)
         assertTrue("twitter-drawer.js exceeds 450 lines", drawer.lines().size <= 450)
@@ -309,8 +311,18 @@ class TwitterWebEngineTest {
         assertTrue(theme.contains("setAutoDarkVariant"))
         assertTrue(theme.contains(":not([data-tw-top-bar-clear-glass=\"true\"])"))
 
+        // Screenshot engine contracts
+        assertTrue(screenshot.contains("window.__TW_SCREENSHOT__"))
+        assertTrue(screenshot.contains("findOuterActionGroup"))
+        assertTrue(screenshot.contains("scrollToAndMeasure"))
+        assertTrue(screenshot.contains("twCapturing"))
+        assertTrue(screenshot.contains("twCaptureTarget"))
+        assertTrue(screenshot.contains("requestTweetScreenshot"))
+
         // Feature engine contracts
         assertTrue(features.contains("window.__TW_FEATURES__"))
+        assertTrue(features.contains("tw-mod-shot-btn"))
+        assertTrue(features.contains("enableTweetScreenshot"))
         assertTrue(features.contains("getCfg().disableVideoAutoplay"))
         assertFalse(features.contains("aria-labelledby=\"modal-header\""))
         assertTrue(features.contains("[data-testid=\"UserName\"]"))
@@ -398,6 +410,9 @@ class TwitterWebEngineTest {
         assertTrue(css.contains("removeBookmark"))
         assertTrue(css.contains("FloatingActionButtons_Tweet_Button"))
         assertTrue(css.contains(".tw-mod-theme-bar"))
+        assertTrue(css.contains(".tw-mod-shot-btn"))
+        assertTrue(css.contains("data-tw-capturing=\"true\""))
+        assertTrue(css.contains("data-tw-capture-target=\"true\""))
         assertTrue(css.contains(".tw-mod-dark-subrow"))
         assertTrue(css.contains("[role=\"group\"] > div:has(> a[href*=\"/analytics\"])"))
         assertTrue(css.contains("#tw-status-bar-glass"))
@@ -443,6 +458,7 @@ class TwitterWebEngineTest {
         val bundle = TwitterAssetBundle(
             interceptorJs = "/*INTERCEPTOR*/",
             themeJs = "/*THEME*/",
+            screenshotJs = "/*SCREENSHOT*/",
             featuresJs = "/*FEATURES*/",
             chromeJs = "/*CHROME*/",
             drawerJs = "/*DRAWER*/",
@@ -472,7 +488,9 @@ class TwitterWebEngineTest {
         assertTrue(seedScript.contains("window.__TWITTER_NAV_INSET_BOTTOM__ = 0;"))
         assertTrue(seedScript.contains("window.__TWITTER_SYSTEM_DARK__ = true;"))
         assertTrue(seedScript.contains("window.__applyTwitterConfig(window.__TWITTER_CONFIG__, true);"))
-        assertTrue(bundle.coreEngineScript.indexOf("/*THEME*/") < bundle.coreEngineScript.indexOf("/*CHROME*/"))
+        assertTrue(bundle.coreEngineScript.indexOf("/*THEME*/") < bundle.coreEngineScript.indexOf("/*SCREENSHOT*/"))
+        assertTrue(bundle.coreEngineScript.indexOf("/*SCREENSHOT*/") < bundle.coreEngineScript.indexOf("/*FEATURES*/"))
+        assertTrue(bundle.coreEngineScript.indexOf("/*FEATURES*/") < bundle.coreEngineScript.indexOf("/*CHROME*/"))
         assertTrue(bundle.coreEngineScript.indexOf("/*CHROME*/") < bundle.coreEngineScript.indexOf("/*DRAWER*/"))
         assertTrue(bundle.coreEngineScript.indexOf("/*DRAWER*/") < bundle.coreEngineScript.indexOf("/*VIEWPORT*/"))
         assertTrue(bundle.coreEngineScript.indexOf("/*VIEWPORT*/") < bundle.coreEngineScript.indexOf("/*DOM*/"))

@@ -13,6 +13,7 @@ import org.json.JSONObject
 class TwitterAssetBundle internal constructor(
     interceptorJs: String,
     themeJs: String,
+    screenshotJs: String = "",
     featuresJs: String,
     chromeJs: String,
     drawerJs: String,
@@ -22,7 +23,8 @@ class TwitterAssetBundle internal constructor(
 ) {
     val coreEngineScript: String = buildString(
         BRIDGE_SHIM_JS.length + quotedCss.length + interceptorJs.length + themeJs.length +
-            featuresJs.length + chromeJs.length + drawerJs.length + viewportJs.length + domJs.length + 160
+            screenshotJs.length + featuresJs.length + chromeJs.length + drawerJs.length +
+            viewportJs.length + domJs.length + 180
     ) {
         append("window.__TWITTER_CLEAN_CSS__ = ")
         append(quotedCss)
@@ -32,6 +34,8 @@ class TwitterAssetBundle internal constructor(
         append(interceptorJs)
         append("\n;\n")
         append(themeJs)
+        append("\n;\n")
+        append(screenshotJs)
         append("\n;\n")
         append(featuresJs)
         append("\n;\n")
@@ -110,13 +114,24 @@ class TwitterAssetBundle internal constructor(
         private fun loadFromAssets(context: Context): TwitterAssetBundle {
             val interceptorJs = readAsset(context, "twitter-interceptor.js")
             val themeJs = readAsset(context, "twitter-theme.js")
+            val screenshotJs = readAsset(context, "twitter-screenshot.js")
             val featuresJs = readAsset(context, "twitter-features.js")
             val chromeJs = readAsset(context, "twitter-chrome.js")
             val drawerJs = readAsset(context, "twitter-drawer.js")
             val viewportJs = readAsset(context, "twitter-viewport.js")
             val domJs = readAsset(context, "twitter-dom.js")
             val quotedCss = JSONObject.quote(readAsset(context, "twitter-clean.css"))
-            return TwitterAssetBundle(interceptorJs, themeJs, featuresJs, chromeJs, drawerJs, viewportJs, domJs, quotedCss)
+            return TwitterAssetBundle(
+                interceptorJs = interceptorJs,
+                themeJs = themeJs,
+                screenshotJs = screenshotJs,
+                featuresJs = featuresJs,
+                chromeJs = chromeJs,
+                drawerJs = drawerJs,
+                viewportJs = viewportJs,
+                domJs = domJs,
+                quotedCss = quotedCss
+            )
         }
 
         private fun readAsset(context: Context, name: String): String {
@@ -142,7 +157,8 @@ class TwitterAssetBundle internal constructor(
                     onThemeColorChanged: (hexColor) => post({ type: "onThemeColorChanged", hexColor: String(hexColor || "") }),
                     setThemeMode: (mode) => post({ type: "setThemeMode", mode: String(mode || "") }),
                     setAutoDarkVariant: (variant) => post({ type: "setAutoDarkVariant", variant: String(variant || "") }),
-                    reportStatsDelta: (ads, clutter) => post({ type: "reportStatsDelta", ads: Number(ads) || 0, clutter: Number(clutter) || 0 })
+                    reportStatsDelta: (ads, clutter) => post({ type: "reportStatsDelta", ads: Number(ads) || 0, clutter: Number(clutter) || 0 }),
+                    requestTweetScreenshot: (metaJson) => post({ type: "requestTweetScreenshot", metaJson: String(metaJson || "") })
                 };
             })();
         """.trimIndent()

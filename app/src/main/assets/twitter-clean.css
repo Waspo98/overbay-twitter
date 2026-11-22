@@ -118,15 +118,41 @@ html[data-tw-badge-mode="HIDE_PAID_BLUE"] [data-testid="icon-verified"][data-tw-
     display: none !important;
 }
 
-/* Injected Video Download Button */
-.tw-mod-dl-btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    background: transparent; border: none; padding: 0 8px; margin: 0;
+/* Injected Tweet Action Bar Buttons (Screenshot & Video Download) */
+.tw-mod-dl-btn,
+.tw-mod-shot-btn {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    background: transparent; border: none; padding: 0 6px; margin: 0;
     cursor: pointer; color: rgb(113, 118, 123); border-radius: 9999px;
-    min-width: 34px; min-height: 34px; transition: color 0.15s ease, background-color 0.15s ease;
+    min-width: 32px; min-height: 32px; transition: color 0.15s ease, background-color 0.15s ease;
 }
-.tw-mod-dl-btn:active { color: #1DA1F2; background-color: rgba(29, 161, 242, 0.15); }
+.tw-mod-dl-btn:active,
+.tw-mod-shot-btn:active { color: #1DA1F2; background-color: rgba(29, 161, 242, 0.15); }
 .tw-mod-dl-btn svg { width: 18px; height: 18px; fill: currentColor; }
+.tw-mod-shot-btn svg {
+    width: 18.5px; height: 18.5px; fill: none; stroke: currentColor;
+    stroke-width: 1.85; stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* Clean Tweet Screenshot Capture Mode (instant hide of chrome, carets & mod buttons) */
+html[data-tw-capturing="true"] #tw-status-bar-glass,
+html[data-tw-capturing="true"] [data-tw-capture-hide="true"],
+html[data-tw-capturing="true"] [data-testid="BottomBar"],
+html[data-tw-capturing="true"] [data-testid="FloatingActionButtonBase"],
+html[data-tw-capturing="true"] [data-testid="toast"] {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    transition: none !important;
+    animation: none !important;
+    pointer-events: none !important;
+}
+html[data-tw-capturing="true"] [data-tw-capture-target="true"] .tw-mod-dl-btn,
+html[data-tw-capturing="true"] [data-tw-capture-target="true"] .tw-mod-shot-btn {
+    display: none !important;
+}
+html[data-tw-capturing="true"] [data-tw-capture-target="true"] [data-testid="caret"] {
+    visibility: hidden !important;
+}
 
 /* Injected Fullscreen Photo Lightbox Download Button */
 .tw-mod-img-dl-btn {

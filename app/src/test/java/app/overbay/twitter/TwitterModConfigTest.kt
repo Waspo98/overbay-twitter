@@ -3,6 +3,7 @@ package app.overbay.twitter
 import android.content.SharedPreferences
 import app.overbay.twitter.model.DetectedHomeFeed
 import app.overbay.twitter.model.HomeFeedKind
+import app.overbay.twitter.model.TweetScreenshotStyle
 import app.overbay.twitter.model.TwitterConfigRepository
 import app.overbay.twitter.model.TwitterDarkVariant
 import app.overbay.twitter.model.TwitterModConfig
@@ -40,6 +41,9 @@ class TwitterModConfigTest {
         assertTrue(defaults.hideViewCounts)
         assertTrue(defaults.cleanBottomNav)
         assertTrue(defaults.enableVideoDownloader)
+        assertTrue(defaults.enableTweetScreenshot)
+        assertEquals(TweetScreenshotStyle.CLEAN_CARD, defaults.tweetScreenshotStyle)
+        assertFalse(defaults.tweetScreenshotIncludeMetrics)
         assertTrue(defaults.forceOrigQualityImages)
         assertTrue(defaults.unwrapTcoLinks)
         assertTrue(defaults.openLinksInCustomTab)
@@ -64,6 +68,9 @@ class TwitterModConfigTest {
             hideQuoteTweets = true,
             hideBookmarkCounts = true,
             verifiedBadgeMode = VerifiedBadgeMode.HIDE_PAID_BLUE,
+            enableTweetScreenshot = false,
+            tweetScreenshotStyle = TweetScreenshotStyle.FRAMED,
+            tweetScreenshotIncludeMetrics = true,
             openLinksInCustomTab = false,
             disableVideoAutoplay = true,
             mutedPatterns = listOf("crypto", "/\\bpromo\\b/i", "spam.example")
@@ -83,6 +90,9 @@ class TwitterModConfigTest {
                 autoDarkVariant = TwitterDarkVariant.DIM,
                 removeGrok = false,
                 hideViewCounts = false,
+                enableTweetScreenshot = false,
+                tweetScreenshotStyle = TweetScreenshotStyle.TIGHT,
+                tweetScreenshotIncludeMetrics = true,
                 verifiedBadgeMode = VerifiedBadgeMode.HIDE_ALL
             ).requiresReloadComparedTo(base)
         )

@@ -291,7 +291,8 @@ fun TwitterWebView(
                     },
                     onSetThemeMode = { rawMode -> latestOnSetThemeMode(rawMode) },
                     onSetAutoDarkVariant = { rawVariant -> latestOnSetAutoDarkVariant(rawVariant) },
-                    onStatsDelta = { ads, clutter -> latestOnStatsDelta(ads, clutter) }
+                    onStatsDelta = { ads, clutter -> latestOnStatsDelta(ads, clutter) },
+                    onRequestTweetScreenshot = { json -> controller.onRequestTweetScreenshot?.invoke(json) }
                 )
 
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {

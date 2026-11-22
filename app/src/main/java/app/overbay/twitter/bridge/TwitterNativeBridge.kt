@@ -23,7 +23,8 @@ class TwitterNativeBridge(
     private val onThemeColorChange: (Int) -> Unit = {},
     private val onSetThemeMode: (String) -> Unit = {},
     private val onSetAutoDarkVariant: (String) -> Unit = {},
-    private val onStatsDelta: (adsDelta: Int, clutterDelta: Int) -> Unit = { _, _ -> }
+    private val onStatsDelta: (adsDelta: Int, clutterDelta: Int) -> Unit = { _, _ -> },
+    private val onRequestTweetScreenshot: (String) -> Unit = {}
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -43,6 +44,7 @@ class TwitterNativeBridge(
             "setThemeMode" -> setThemeMode(obj.optString("mode", ""))
             "setAutoDarkVariant" -> setAutoDarkVariant(obj.optString("variant", ""))
             "reportStatsDelta" -> reportStatsDelta(obj.optInt("ads", 0), obj.optInt("clutter", 0))
+            "requestTweetScreenshot" -> requestTweetScreenshot(obj.optString("metaJson", ""))
         }
     }
 
@@ -128,6 +130,11 @@ class TwitterNativeBridge(
     fun reportStatsDelta(adsDelta: Int, clutterDelta: Int) {
         if (adsDelta <= 0 && clutterDelta <= 0) return
         postToMain { onStatsDelta(adsDelta.coerceAtLeast(0), clutterDelta.coerceAtLeast(0)) }
+    }
+
+    @JavascriptInterface
+    fun requestTweetScreenshot(metaJson: String) {
+        postToMain { onRequestTweetScreenshot(metaJson) }
     }
 
     private fun postToMain(block: () -> Unit) {

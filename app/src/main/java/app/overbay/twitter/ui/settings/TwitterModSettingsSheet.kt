@@ -324,6 +324,12 @@ fun TwitterModSettingsSheet(
                             onCheckedChange = { checked -> onUpdate { it.copy(enableVideoDownloader = checked) } }
                         )
                         ModSwitchRow(
+                            title = "1-Tap Tweet Screenshot",
+                            subtitle = "Add a capture button next to Share for formatted tweet cards.",
+                            checked = config.enableTweetScreenshot,
+                            onCheckedChange = { checked -> onUpdate { it.copy(enableTweetScreenshot = checked) } }
+                        )
+                        ModSwitchRow(
                             title = "Force Original Quality Images",
                             subtitle = "Upgrade full-screen photo viewers to name=orig resolution.",
                             checked = config.forceOrigQualityImages,

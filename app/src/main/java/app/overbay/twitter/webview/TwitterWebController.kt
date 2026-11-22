@@ -27,6 +27,7 @@ class TwitterWebController {
     internal var swipeRefresh: SwipeRefreshLayout? = null
     internal var customViewCallback: WebChromeClient.CustomViewCallback? = null
     internal var onForceClearCustomView: (() -> Unit)? = null
+    internal var onRequestTweetScreenshot: ((String) -> Unit)? = null
     var lastKnownUrl: String = DEFAULT_HOME_URL
         internal set
     private var pullBlockedByPath = false

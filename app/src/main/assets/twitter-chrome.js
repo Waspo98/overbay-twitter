@@ -349,6 +349,7 @@
     }
 
     function handleScrollEvent(e) {
+        if (document.documentElement?.dataset?.twCapturing === "true") return;
         if (lastScrollPath !== location.pathname) { lastScrollPath = location.pathname; resetBottomScrollTracker(); return; }
         const info = readScrollTargetY(e?.target);
         if (!info) return;

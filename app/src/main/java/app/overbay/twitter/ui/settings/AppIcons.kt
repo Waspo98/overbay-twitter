@@ -306,6 +306,45 @@ internal object AppIcons {
         close()
     }
 
+    val Download: ImageVector = roundedIcon("Download") {
+        moveTo(16.59f, 9.0f)
+        horizontalLineTo(15.0f)
+        verticalLineTo(4.0f)
+        curveTo(15.0f, 3.45f, 14.55f, 3.0f, 14.0f, 3.0f)
+        horizontalLineTo(10.0f)
+        curveTo(9.45f, 3.0f, 9.0f, 3.45f, 9.0f, 4.0f)
+        verticalLineTo(9.0f)
+        horizontalLineTo(7.41f)
+        curveTo(6.52f, 9.0f, 6.07f, 10.08f, 6.7f, 10.71f)
+        lineTo(11.29f, 15.3f)
+        curveTo(11.68f, 15.69f, 12.31f, 15.69f, 12.7f, 15.3f)
+        lineTo(17.29f, 10.71f)
+        curveTo(17.92f, 10.08f, 17.48f, 9.0f, 16.59f, 9.0f)
+        close()
+        moveTo(5.0f, 19.0f)
+        curveTo(5.0f, 19.55f, 5.45f, 20.0f, 6.0f, 20.0f)
+        horizontalLineTo(18.0f)
+        curveTo(18.55f, 20.0f, 19.0f, 19.55f, 19.0f, 19.0f)
+        reflectiveCurveTo(18.55f, 18.0f, 18.0f, 18.0f)
+        horizontalLineTo(6.0f)
+        curveTo(5.45f, 18.0f, 5.0f, 18.55f, 5.0f, 19.0f)
+        close()
+    }
+
+    val Check: ImageVector = roundedIcon("Check") {
+        moveTo(9.0f, 16.17f)
+        lineTo(5.53f, 12.7f)
+        curveTo(5.14f, 12.31f, 4.51f, 12.31f, 4.12f, 12.7f)
+        curveTo(3.73f, 13.09f, 3.73f, 13.72f, 4.12f, 14.11f)
+        lineTo(8.3f, 18.29f)
+        curveTo(8.69f, 18.68f, 9.32f, 18.68f, 9.71f, 18.29f)
+        lineTo(20.29f, 7.71f)
+        curveTo(20.68f, 7.32f, 20.68f, 6.69f, 20.29f, 6.3f)
+        curveTo(19.9f, 5.91f, 19.27f, 5.91f, 18.88f, 6.3f)
+        lineTo(9.0f, 16.17f)
+        close()
+    }
+
     private inline fun roundedIcon(
         name: String,
         autoMirror: Boolean = false,
