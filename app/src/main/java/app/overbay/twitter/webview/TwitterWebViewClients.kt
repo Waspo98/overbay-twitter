@@ -33,6 +33,7 @@ internal class TwitterWebViewClient(
     private val configJsonRef: AtomicReference<String>,
     private val isSystemDarkRef: AtomicReference<Boolean>,
     private val themeColorRef: AtomicInteger,
+    private val navInsetTopRef: AtomicInteger = AtomicInteger(0),
     private val navInsetBottomRef: AtomicInteger = AtomicInteger(0),
     private val consumeFallbackRestoreJson: () -> String? = { null },
     private val onClearOneShotRestoreScript: () -> Unit = {},
@@ -54,7 +55,8 @@ internal class TwitterWebViewClient(
                     configJson = configJsonRef.get(),
                     isSystemDark = isSystemDarkRef.get(),
                     restoreStateJson = consumeFallbackRestoreJson(),
-                    navInsetBottomDp = navInsetBottomRef.get()
+                    navInsetBottomDp = navInsetBottomRef.get(),
+                    navInsetTopDp = navInsetTopRef.get()
                 ),
                 null
             )

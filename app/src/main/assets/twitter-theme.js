@@ -258,12 +258,16 @@
         const inkKey = `${mode}|${variant}|${document.documentElement?.dataset?.twSurfaceOverride || ""}`;
         for (const wrap of document.querySelectorAll('[data-tw-theme-bar="true"]')) {
             updateThemeBarSelection(wrap, mode, variant);
-            syncWrapInk(wrap, wrap.closest('[data-testid="Drawer"], [role="dialog"]')?.querySelector('a[href="/settings"], a[href="/settings/account"]'), inkKey);
+            const drawerRoot = wrap.closest('[data-testid="Drawer"], [role="dialog"]');
+            const link = drawerRoot?.querySelector('a[href="/settings"], a[href="/settings/account"]');
+            syncWrapInk(wrap, link, inkKey);
+            if (drawerRoot && link) window.__TW_DRAWER__?.trackActiveDrawer?.(drawerRoot, link);
         }
         for (const link of document.querySelectorAll('a[href="/settings"], a[href="/settings/account"]')) {
             if (link.closest('[data-testid="primaryColumn"]')) continue;
             const drawerRoot = link.closest('[data-testid="Drawer"], [role="dialog"]');
             if (!drawerRoot || drawerRoot.querySelector('[data-tw-theme-bar="true"]')) continue;
+            window.__TW_DRAWER__?.trackActiveDrawer?.(drawerRoot, link);
             const col = findDrawerTopColumn(drawerRoot, link);
             if (!col) continue;
             const wrap = document.createElement("div");
@@ -320,5 +324,5 @@
         }
     }
 
-    window.__TW_THEME__ = { syncSurfaceStyleSheet, syncDrawerThemeBars };
+    window.__TW_THEME__ = { isEffectiveDarkScheme, syncSurfaceStyleSheet, syncDrawerThemeBars };
 })();

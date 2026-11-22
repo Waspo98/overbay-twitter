@@ -8,10 +8,12 @@ import app.overbay.twitter.model.TwitterDarkVariant
 import app.overbay.twitter.model.TwitterModConfig
 import app.overbay.twitter.model.TwitterThemeMode
 import app.overbay.twitter.ui.computeUncoveredNavBottomDp
+import app.overbay.twitter.ui.computeUncoveredTopInsetDp
 import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
 import app.overbay.twitter.ui.theme.resolveInitialColorInt
 import app.overbay.twitter.webview.DisplayLayoutState
 import app.overbay.twitter.webview.FoldableLayoutPolicy
+import app.overbay.twitter.webview.TwitterAssetBundle
 import app.overbay.twitter.webview.TwitterRequestBlocker
 import app.overbay.twitter.webview.TwitterWebController
 import app.overbay.twitter.webview.isPullRefreshBlockedPath
@@ -254,6 +256,8 @@ class TwitterWebEngineTest {
         val interceptor = File(assetsDir, "twitter-interceptor.js").readText()
         val theme = File(assetsDir, "twitter-theme.js").readText()
         val features = File(assetsDir, "twitter-features.js").readText()
+        val chrome = File(assetsDir, "twitter-chrome.js").readText()
+        val drawer = File(assetsDir, "twitter-drawer.js").readText()
         val viewport = File(assetsDir, "twitter-viewport.js").readText()
         val dom = File(assetsDir, "twitter-dom.js").readText()
         val css = File(assetsDir, "twitter-clean.css").readText()
@@ -261,6 +265,8 @@ class TwitterWebEngineTest {
         assertTrue("twitter-interceptor.js exceeds 450 lines", interceptor.lines().size <= 450)
         assertTrue("twitter-theme.js exceeds 450 lines", theme.lines().size <= 450)
         assertTrue("twitter-features.js exceeds 450 lines", features.lines().size <= 450)
+        assertTrue("twitter-chrome.js exceeds 450 lines", chrome.lines().size <= 450)
+        assertTrue("twitter-drawer.js exceeds 450 lines", drawer.lines().size <= 450)
         assertTrue("twitter-viewport.js exceeds 450 lines", viewport.lines().size <= 450)
         assertTrue("twitter-dom.js exceeds 450 lines", dom.lines().size <= 450)
         assertTrue("twitter-clean.css exceeds 450 lines", css.lines().size <= 450)
@@ -292,11 +298,13 @@ class TwitterWebEngineTest {
         // Theme engine contracts
         assertTrue(theme.contains("prefers-color-scheme"))
         assertTrue(theme.contains("__twNotifyColorSchemeChange"))
+        assertTrue(theme.contains("isEffectiveDarkScheme"))
         assertTrue(theme.contains("syncSurfaceStyleSheet"))
         assertTrue(theme.contains("scannedCounts"))
         assertTrue(theme.contains("emittedSelectors"))
         assertTrue(theme.contains("currentCssParts"))
         assertTrue(theme.contains("syncDrawerThemeBars"))
+        assertTrue(theme.contains("trackActiveDrawer"))
         assertTrue(theme.contains("setThemeMode"))
         assertTrue(theme.contains("setAutoDarkVariant"))
 
@@ -315,20 +323,45 @@ class TwitterWebEngineTest {
         assertFalse(nonProfileRe.containsMatchIn("/jack"))
         assertFalse(nonProfileRe.containsMatchIn("/jack/status/123"))
 
+        // Chrome insets, glass, auto-hide & drawer exit-ghost contracts
+        assertTrue(chrome.contains("window.__TW_CHROME__"))
+        assertTrue(chrome.contains("__twSetNavInsets"))
+        assertFalse(chrome.contains("__twSetNavInsetBottom"))
+        assertTrue(chrome.contains("syncNavInsets"))
+        assertTrue(chrome.contains("syncTopInsets"))
+        assertTrue(chrome.contains("ensureStatusBarGlass"))
+        assertTrue(chrome.contains("tw-status-bar-glass"))
+        assertTrue(chrome.contains("data-tw-top-bar-offset"))
+        assertTrue(chrome.contains("data-tw-top-bar-autohide"))
+        assertTrue(chrome.contains("hostChain"))
+        assertTrue(chrome.contains("/i/chat"))
+        assertTrue(chrome.contains("scrollerLastY.has"))
+        assertTrue(chrome.contains("syncBottomOffsetHost"))
+        assertTrue(chrome.contains("--tw-nav-inset-top"))
+        assertTrue(chrome.contains("--tw-nav-inset-bottom"))
+        assertTrue(chrome.contains("data-tw-bottom-bar-surface"))
+        assertTrue(chrome.contains("FloatingActionButtonBase"))
+        assertTrue(chrome.contains("readScrollTargetY"))
+        assertTrue(chrome.contains("twBottomHidden"))
+        assertTrue(chrome.contains("--tw-bottom-bar-base-h"))
+        assertFalse(chrome.contains("data-tw-top-bar-surface"))
+        assertFalse(chrome.contains("data-tw-top-bar-expand"))
+        assertFalse(chrome.contains("data-tw-top-bar-host"))
+        assertFalse(chrome.contains("data-tw-top-col-pad"))
+        assertFalse(chrome.contains("data-tw-bottom-bar\""))
+        assertFalse(chrome.contains("data-tw-bottom-bar-clear"))
+        assertFalse(chrome.contains("__twDumpBottomDebug"))
+
+        // Drawer exit-ghost engine contracts
+        assertTrue(drawer.contains("window.__TW_DRAWER__"))
+        assertTrue(drawer.contains("trackActiveDrawer"))
+        assertTrue(drawer.contains("onDomRemoval"))
+        assertTrue(drawer.contains("tw-drawer-exit-ghost"))
+        assertTrue(drawer.contains("isAlreadySlidOffscreen"))
+
         // Viewport & location-restore engine contracts
         assertTrue(viewport.contains("window.__TW_VIEWPORT__"))
-        assertTrue(viewport.contains("__twSetNavInsetBottom"))
-        assertTrue(viewport.contains("syncNavInsets"))
-        assertTrue(viewport.contains("syncBottomOffsetHost"))
-        assertTrue(viewport.contains("--tw-nav-inset-bottom"))
-        assertTrue(viewport.contains("data-tw-bottom-bar-surface"))
-        assertTrue(viewport.contains("FloatingActionButtonBase"))
-        assertTrue(viewport.contains("readScrollTargetY"))
-        assertTrue(viewport.contains("twBottomHidden"))
-        assertTrue(viewport.contains("--tw-bottom-bar-base-h"))
-        assertFalse(viewport.contains("data-tw-bottom-bar\""))
-        assertFalse(viewport.contains("data-tw-bottom-bar-clear"))
-        assertFalse(viewport.contains("__twDumpBottomDebug"))
+        assertFalse(viewport.contains("__twSetNavInsetBottom"))
         assertTrue(viewport.contains("__twCaptureLocation"))
         assertTrue(viewport.contains("__twCancelReflow"))
         assertTrue(viewport.contains("__twReflowViewport"))
@@ -345,6 +378,8 @@ class TwitterWebEngineTest {
         assertFalse(dom.contains("twSurfaceTheme"))
         assertTrue(dom.contains("syncNavInsets"))
         assertTrue(dom.contains("navInsetsDirty"))
+        assertTrue(dom.contains("app-bar-back"))
+        assertTrue(dom.contains("effectiveCheckNavInsets"))
         assertFalse(dom.contains("twLogoChecked"))
         assertFalse(dom.contains("openSettingsWithHaptic?.() ??"))
         assertFalse(dom.contains("__TWITTER_IS_UNFOLDED__"))
@@ -356,6 +391,24 @@ class TwitterWebEngineTest {
         assertTrue(css.contains(".tw-mod-theme-bar"))
         assertTrue(css.contains(".tw-mod-dark-subrow"))
         assertTrue(css.contains("[role=\"group\"] > div:has(> a[href*=\"/analytics\"])"))
+        assertTrue(css.contains("#tw-status-bar-glass"))
+        assertTrue(css.contains("z-index: 9000;"))
+        assertFalse(css.contains("z-index: 2147483640;"))
+        assertTrue(css.contains("data-tw-top-inset=\"true\""))
+        assertTrue(css.contains("data-tw-top-bar-offset=\"true\""))
+        assertTrue(css.contains("data-tw-top-bar-clear-glass=\"true\""))
+        assertTrue(css.contains("data-tw-glass-unified=\"true\""))
+        assertTrue(css.contains("#layers:has([data-testid=\"Drawer\"]"))
+        assertTrue(css.contains("#tw-drawer-exit-ghost"))
+        assertTrue(css.contains("--tw-top-hdr-h"))
+        assertTrue(css.contains("clip-path: inset(0 0 var(--tw-top-hdr-h, 0px) 0)"))
+        assertTrue(css.contains("data-tw-top-bar-autohide=\"true\""))
+        assertTrue(css.contains("clip-path: inset(100% 0 0 0)"))
+        assertTrue(css.contains("--tw-nav-inset-top"))
+        assertFalse(css.contains("data-tw-top-bar-surface"))
+        assertFalse(css.contains("data-tw-top-bar-expand"))
+        assertFalse(css.contains("data-tw-top-bar-host"))
+        assertFalse(css.contains("data-tw-top-col-pad"))
         assertTrue(css.contains("data-tw-nav-inset=\"true\""))
         assertTrue(css.contains("data-tw-bottom-bar-surface=\"true\""))
         assertTrue(css.contains("[data-testid=\"FloatingActionButtonBase\"]"))
@@ -365,6 +418,55 @@ class TwitterWebEngineTest {
         assertFalse(css.contains("data-tw-bottom-bar-host"))
         assertFalse(css.contains("rgba(255, 255, 255, 0.85)"))
         assertFalse(css.contains("data-tw-force-bottom-nav"))
+    }
+
+    @Test
+    fun assetBundleBuildsSafeNavInsetAndConfigSeedScripts() {
+        val bundle = TwitterAssetBundle(
+            interceptorJs = "/*INTERCEPTOR*/",
+            themeJs = "/*THEME*/",
+            featuresJs = "/*FEATURES*/",
+            chromeJs = "/*CHROME*/",
+            drawerJs = "/*DRAWER*/",
+            viewportJs = "/*VIEWPORT*/",
+            domJs = "/*DOM*/",
+            quotedCss = "\"\""
+        )
+        val navScript = bundle.buildNavInsetScript(navInsetBottomDp = 24, navInsetTopDp = 36)
+        assertTrue(navScript.contains("window.__TWITTER_NAV_INSET_TOP__ = 36;"))
+        assertTrue(navScript.contains("window.__TWITTER_NAV_INSET_BOTTOM__ = 24;"))
+        assertTrue(navScript.contains("window.__twSetNavInsets(36, 24);"))
+
+        val clampedNavScript = bundle.buildNavInsetScript(navInsetBottomDp = -12, navInsetTopDp = -8)
+        assertTrue(clampedNavScript.contains("window.__TWITTER_NAV_INSET_TOP__ = 0;"))
+        assertTrue(clampedNavScript.contains("window.__TWITTER_NAV_INSET_BOTTOM__ = 0;"))
+        assertTrue(clampedNavScript.contains("window.__twSetNavInsets(0, 0);"))
+
+        val seedScript = bundle.buildConfigSeedScript(
+            configJson = "{\"blockAds\":true}",
+            isSystemDark = true,
+            restoreStateJson = "{\"scrollY\":120}",
+            navInsetBottomDp = -5,
+            navInsetTopDp = 44
+        )
+        assertTrue(seedScript.contains("window.__TWITTER_RESTORE_STATE__ = {\"scrollY\":120};"))
+        assertTrue(seedScript.contains("window.__TWITTER_NAV_INSET_TOP__ = 44;"))
+        assertTrue(seedScript.contains("window.__TWITTER_NAV_INSET_BOTTOM__ = 0;"))
+        assertTrue(seedScript.contains("window.__TWITTER_SYSTEM_DARK__ = true;"))
+        assertTrue(seedScript.contains("window.__applyTwitterConfig(window.__TWITTER_CONFIG__, true);"))
+        assertTrue(bundle.coreEngineScript.indexOf("/*THEME*/") < bundle.coreEngineScript.indexOf("/*CHROME*/"))
+        assertTrue(bundle.coreEngineScript.indexOf("/*CHROME*/") < bundle.coreEngineScript.indexOf("/*DRAWER*/"))
+        assertTrue(bundle.coreEngineScript.indexOf("/*DRAWER*/") < bundle.coreEngineScript.indexOf("/*VIEWPORT*/"))
+        assertTrue(bundle.coreEngineScript.indexOf("/*VIEWPORT*/") < bundle.coreEngineScript.indexOf("/*DOM*/"))
+    }
+
+    @Test
+    fun uncoveredTopInsetDpRespectsCutoutsDensityAndFullscreenVideo() {
+        assertEquals(36, computeUncoveredTopInsetDp(statusTopPx = 99, cutoutTopPx = 0, density = 2.75f, isFullscreenVideo = false))
+        assertEquals(44, computeUncoveredTopInsetDp(statusTopPx = 99, cutoutTopPx = 121, density = 2.75f, isFullscreenVideo = false))
+        assertEquals(0, computeUncoveredTopInsetDp(statusTopPx = 99, cutoutTopPx = 121, density = 2.75f, isFullscreenVideo = true))
+        assertEquals(0, computeUncoveredTopInsetDp(statusTopPx = 0, cutoutTopPx = 0, density = 3.0f, isFullscreenVideo = false))
+        assertEquals(0, computeUncoveredTopInsetDp(statusTopPx = 99, cutoutTopPx = 0, density = 0f, isFullscreenVideo = false))
     }
 
     @Test

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -83,6 +84,7 @@ internal fun SyncSystemBarsEffect(
             WindowCompat.setDecorFitsSystemWindows(window, false)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 window.isNavigationBarContrastEnforced = false
+                window.isStatusBarContrastEnforced = false
             }
             val insetsController = WindowCompat.getInsetsController(window, view)
             insetsController.isAppearanceLightStatusBars = lightBars
@@ -99,6 +101,24 @@ internal fun SyncSystemBarsEffect(
     }
 }
 
+internal data class WebViewEdgeToEdgeState(
+    val webViewInsets: WindowInsets,
+    val topInsetDp: Int,
+    val bottomInsetDp: Int,
+    val topInsetPx: Int
+)
+
+internal fun computeUncoveredTopInsetDp(
+    statusTopPx: Int,
+    cutoutTopPx: Int,
+    density: Float,
+    isFullscreenVideo: Boolean
+): Int {
+    if (isFullscreenVideo || density <= 0f) return 0
+    val uncoveredPx = maxOf(statusTopPx, cutoutTopPx).coerceAtLeast(0)
+    return if (uncoveredPx == 0) 0 else ceil(uncoveredPx / density).toInt()
+}
+
 internal fun computeUncoveredNavBottomDp(
     navBottomPx: Int,
     imeBottomPx: Int,
@@ -113,17 +133,35 @@ internal fun computeUncoveredNavBottomDp(
 }
 
 @Composable
-internal fun rememberWebViewEdgeToEdgeState(isFullscreenVideo: Boolean): Pair<WindowInsets, Int> {
+internal fun rememberWebViewEdgeToEdgeState(isFullscreenVideo: Boolean): WebViewEdgeToEdgeState {
     val density = LocalDensity.current
-    val safeTopAndHorizontal = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+    val safeHorizontal = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+    val statusInsets = WindowInsets.statusBars
     val navInsets = WindowInsets.navigationBars
     val imeInsets = WindowInsets.ime
-    val bottomCutout = WindowInsets.displayCutout.only(WindowInsetsSides.Bottom)
-    val webViewInsets = remember(safeTopAndHorizontal, imeInsets, bottomCutout) {
-        safeTopAndHorizontal.union(imeInsets).union(bottomCutout)
+    val cutoutInsets = WindowInsets.displayCutout
+    val bottomCutout = cutoutInsets.only(WindowInsetsSides.Bottom)
+    val webViewInsets = remember(safeHorizontal, imeInsets, bottomCutout) {
+        safeHorizontal.union(imeInsets).union(bottomCutout)
     }
     val latestFullscreen by rememberUpdatedState(isFullscreenVideo)
-    val navBottomDp by remember(density, navInsets, imeInsets, bottomCutout) {
+    val topInsetPx by remember(density, statusInsets, cutoutInsets) {
+        derivedStateOf {
+            if (latestFullscreen) 0
+            else maxOf(statusInsets.getTop(density), cutoutInsets.getTop(density)).coerceAtLeast(0)
+        }
+    }
+    val topInsetDp by remember(density, statusInsets, cutoutInsets) {
+        derivedStateOf {
+            computeUncoveredTopInsetDp(
+                statusTopPx = statusInsets.getTop(density),
+                cutoutTopPx = cutoutInsets.getTop(density),
+                density = density.density,
+                isFullscreenVideo = latestFullscreen
+            )
+        }
+    }
+    val bottomInsetDp by remember(density, navInsets, imeInsets, bottomCutout) {
         derivedStateOf {
             computeUncoveredNavBottomDp(
                 navBottomPx = navInsets.getBottom(density),
@@ -134,7 +172,12 @@ internal fun rememberWebViewEdgeToEdgeState(isFullscreenVideo: Boolean): Pair<Wi
             )
         }
     }
-    return webViewInsets to navBottomDp
+    return WebViewEdgeToEdgeState(
+        webViewInsets = webViewInsets,
+        topInsetDp = topInsetDp,
+        bottomInsetDp = bottomInsetDp,
+        topInsetPx = topInsetPx
+    )
 }
 
 @Composable

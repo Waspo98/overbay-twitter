@@ -53,6 +53,8 @@ fun TwitterWebView(
     configJson: String,
     preferDesktopUserAgent: Boolean,
     isSystemDark: Boolean,
+    navInsetTopDp: Int = 0,
+    navInsetTopPx: Int = 0,
     navInsetBottomDp: Int = 0,
     controller: TwitterWebController,
     onOpenSettings: () -> Unit,
@@ -79,6 +81,7 @@ fun TwitterWebView(
     val configJsonRef = remember { AtomicReference(configJson) }
     val isSystemDarkRef = remember { AtomicReference(isSystemDark) }
     val themeColorRef = remember { AtomicInteger(initialThemeColorInt) }
+    val navInsetTopRef = remember { AtomicInteger(navInsetTopDp) }
     val navInsetBottomRef = remember { AtomicInteger(navInsetBottomDp) }
 
     val latestOnOpenSettings by rememberUpdatedState(onOpenSettings)
@@ -118,7 +121,8 @@ fun TwitterWebView(
     val ownedWebViewRef = remember { AtomicReference<WebView?>(null) }
     val ownedSwipeRefreshRef = remember { AtomicReference<SwipeRefreshLayout?>(null) }
     val lastSeededStateRef = remember { AtomicReference<Pair<String, Boolean>?>(null) }
-    val lastNavInsetDpRef = remember { AtomicInteger(navInsetBottomDp) }
+    val lastNavInsetsRef = remember { AtomicReference(navInsetTopDp to navInsetBottomDp) }
+    val lastTopInsetPxRef = remember { AtomicInteger(-1) }
     var webViewAttached by remember { mutableStateOf(false) }
 
     fun registerStartScript(webView: WebView, ref: AtomicReference<ScriptHandler?>, script: String) {
@@ -136,6 +140,7 @@ fun TwitterWebView(
         configJsonRef.set(configJson)
         isSystemDarkRef.set(isSystemDark)
         themeColorRef.set(initialThemeColorInt)
+        navInsetTopRef.set(navInsetTopDp)
         navInsetBottomRef.set(navInsetBottomDp)
     }
 
@@ -156,18 +161,29 @@ fun TwitterWebView(
         val wv = ownedWebViewRef.get() ?: return@LaunchedEffect
         val stateKey = configJson to isSystemDark
         if (lastSeededStateRef.getAndSet(stateKey) != stateKey) {
-            val script = assetBundle.buildConfigSeedScript(configJson, isSystemDark, navInsetBottomDp = navInsetBottomRef.get())
+            val script = assetBundle.buildConfigSeedScript(
+                configJson, isSystemDark, navInsetBottomDp = navInsetBottomRef.get(), navInsetTopDp = navInsetTopRef.get()
+            )
             registerStartScript(wv, configScriptHandlerRef, script)
             wv.evaluateJavascript(script, null)
         }
     }
 
-    LaunchedEffect(webViewAttached, navInsetBottomDp) {
+    LaunchedEffect(webViewAttached, navInsetTopDp, navInsetBottomDp) {
         val wv = ownedWebViewRef.get() ?: return@LaunchedEffect
-        if (lastNavInsetDpRef.getAndSet(navInsetBottomDp) != navInsetBottomDp) {
-            val script = assetBundle.buildNavInsetScript(navInsetBottomDp)
+        val insetKey = navInsetTopDp to navInsetBottomDp
+        if (lastNavInsetsRef.getAndSet(insetKey) != insetKey) {
+            val script = assetBundle.buildNavInsetScript(navInsetBottomDp, navInsetTopDp)
             registerStartScript(wv, navInsetScriptHandlerRef, script)
             wv.evaluateJavascript(script, null)
+        }
+    }
+
+    LaunchedEffect(webViewAttached, navInsetTopPx) {
+        val sr = ownedSwipeRefreshRef.get() ?: return@LaunchedEffect
+        if (lastTopInsetPxRef.getAndSet(navInsetTopPx) != navInsetTopPx) {
+            val d = context.resources.displayMetrics.density
+            sr.setProgressViewOffset(true, navInsetTopPx + (8 * d).toInt(), navInsetTopPx + (72 * d).toInt())
         }
     }
 
@@ -297,14 +313,15 @@ fun TwitterWebView(
                 if (docStartSupported) {
                     val initialJson = configJsonRef.get()
                     val initialDark = isSystemDarkRef.get()
+                    val initialTopDp = navInsetTopRef.get()
                     val initialNavDp = navInsetBottomRef.get()
                     lastSeededStateRef.set(initialJson to initialDark)
-                    lastNavInsetDpRef.set(initialNavDp)
+                    lastNavInsetsRef.set(initialTopDp to initialNavDp)
                     if (!pendingRestoreJson.isNullOrBlank()) {
                         registerStartScript(this, restoreScriptHandlerRef, "window.__TWITTER_RESTORE_STATE__ = $pendingRestoreJson;")
                     }
-                    registerStartScript(this, configScriptHandlerRef, assetBundle.buildConfigSeedScript(initialJson, initialDark, navInsetBottomDp = initialNavDp))
-                    registerStartScript(this, navInsetScriptHandlerRef, assetBundle.buildNavInsetScript(initialNavDp))
+                    registerStartScript(this, configScriptHandlerRef, assetBundle.buildConfigSeedScript(initialJson, initialDark, navInsetBottomDp = initialNavDp, navInsetTopDp = initialTopDp))
+                    registerStartScript(this, navInsetScriptHandlerRef, assetBundle.buildNavInsetScript(initialNavDp, initialTopDp))
                     registerStartScript(this, coreScriptHandlerRef, assetBundle.coreEngineScript)
                 } else {
                     fallbackRestoreJsonRef.set(pendingRestoreJson)
@@ -319,6 +336,7 @@ fun TwitterWebView(
                     configJsonRef = configJsonRef,
                     isSystemDarkRef = isSystemDarkRef,
                     themeColorRef = themeColorRef,
+                    navInsetTopRef = navInsetTopRef,
                     navInsetBottomRef = navInsetBottomRef,
                     consumeFallbackRestoreJson = { fallbackRestoreJsonRef.getAndSet(null) },
                     onClearOneShotRestoreScript = {

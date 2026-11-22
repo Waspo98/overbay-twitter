@@ -25,9 +25,10 @@
     let checkedLogoSvgs = new WeakSet();
     const dirtyRoots = new Set();
     const NAV_INSET_TESTIDS = new Set([
-        "FloatingActionButtons_Tweet_Button", "inline_reply_offscreen", "dmComposerTextInput", "toolBar", "toast"
+        "FloatingActionButtons_Tweet_Button", "inline_reply_offscreen", "dmComposerTextInput", "toolBar", "toast",
+        "app-bar-back", "SearchBox_Search_Input"
     ]);
-    const NAV_INSET_SELECTOR = '[data-testid="FloatingActionButtons_Tweet_Button"], [data-testid="inline_reply_offscreen"], [data-testid="dmComposerTextInput"], [data-testid="toolBar"], [data-testid="toast"]';
+    const NAV_INSET_SELECTOR = '[data-testid="FloatingActionButtons_Tweet_Button"], [data-testid="inline_reply_offscreen"], [data-testid="dmComposerTextInput"], [data-testid="toolBar"], [data-testid="toast"], [data-testid="app-bar-back"], [data-testid="SearchBox_Search_Input"]';
 
     const getCfg = () => window.__TWITTER_CONFIG__ || {};
     const queryWithinRoots = (roots, fullScan, selector) => window.__TW_FEATURES__.queryWithinRoots(roots, fullScan, selector);
@@ -334,8 +335,8 @@
         const fullScan = fullScanPending || pathChanged;
         const checkHeader = fullScan || headerDirty;
         const checkDialog = fullScan || dialogDirty || Boolean(lastDialogOpen);
-        const checkNavInsets = checkHeader || checkDialog || navInsetsDirty;
         const checkTabs = fullScan || tabsDirty;
+        const checkNavInsets = checkHeader || checkDialog || checkTabs || navInsetsDirty;
         const roots = fullScan ? null : Array.from(dirtyRoots);
 
         fullScanPending = headerDirty = dialogDirty = navInsetsDirty = false;
@@ -343,17 +344,20 @@
 
         ensureStyleTag();
         syncDatasetAndTheme(cfg, fullScan);
-        updateBrandLogos(cfg.classicTwitterBranding !== false, roots, fullScan, checkHeader);
+        const effectiveCheckHeader = checkHeader || headerDirty;
+        const effectiveCheckNavInsets = checkNavInsets || headerDirty;
+        if (headerDirty) headerDirty = false;
+        updateBrandLogos(cfg.classicTwitterBranding !== false, roots, fullScan, effectiveCheckHeader);
         rewriteUiTerminology(cfg.classicTwitterBranding !== false, roots, fullScan);
-        if (checkHeader) {
+        if (effectiveCheckHeader) {
             bindHeaderLongPress();
             injectDrawerModSettingsEntry();
         }
-        if (checkHeader || checkDialog || fullScan) {
+        if (effectiveCheckHeader || checkDialog || fullScan) {
             window.__TW_THEME__?.syncDrawerThemeBars?.(cfg);
         }
-        if (checkNavInsets) {
-            window.__TW_VIEWPORT__?.syncNavInsets?.();
+        if (effectiveCheckNavInsets) {
+            window.__TW_CHROME__?.syncNavInsets?.();
         }
         if (window.__TW_FEATURES__.handleHomeTabs(cfg, checkTabs)) tabsDirty = false;
         window.__TW_FEATURES__.enhanceTweetsAndProfiles(cfg, roots, fullScan);
@@ -390,10 +394,12 @@
 
     const observer = new MutationObserver((records) => {
         let relevant = false;
+        let hadRemovals = false;
         const onHome = location.pathname.startsWith("/home");
         for (const rec of records) {
             const targetEl = rec.target && rec.target.nodeType === Node.ELEMENT_NODE ? rec.target : null;
             if (rec.removedNodes.length > 0) {
+                hadRemovals = true;
                 if (lastDialogOpen) { dialogDirty = relevant = true; }
                 if (!tabsDirty && onHome && targetEl?.closest?.('[role="tablist"]')) { tabsDirty = relevant = true; }
             }
@@ -427,6 +433,7 @@
                 }
             }
         }
+        if (hadRemovals) window.__TW_DRAWER__?.onDomRemoval?.();
         if (relevant) schedulePass();
     });
     observer.observe(document, { childList: true, subtree: true });

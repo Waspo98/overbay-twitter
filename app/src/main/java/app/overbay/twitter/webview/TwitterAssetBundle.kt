@@ -10,17 +10,19 @@ import org.json.JSONObject
  * Static CSS and JS engines are loaded once per process so recompositions and WebView
  * crash recoveries never re-read APK assets on the main thread.
  */
-class TwitterAssetBundle private constructor(
+class TwitterAssetBundle internal constructor(
     interceptorJs: String,
     themeJs: String,
     featuresJs: String,
+    chromeJs: String,
+    drawerJs: String,
     viewportJs: String,
     domJs: String,
     quotedCss: String
 ) {
     val coreEngineScript: String = buildString(
         BRIDGE_SHIM_JS.length + quotedCss.length + interceptorJs.length + themeJs.length +
-            featuresJs.length + viewportJs.length + domJs.length + 128
+            featuresJs.length + chromeJs.length + drawerJs.length + viewportJs.length + domJs.length + 160
     ) {
         append("window.__TWITTER_CLEAN_CSS__ = ")
         append(quotedCss)
@@ -33,6 +35,10 @@ class TwitterAssetBundle private constructor(
         append("\n;\n")
         append(featuresJs)
         append("\n;\n")
+        append(chromeJs)
+        append("\n;\n")
+        append(drawerJs)
+        append("\n;\n")
         append(viewportJs)
         append("\n;\n")
         append(domJs)
@@ -42,17 +48,21 @@ class TwitterAssetBundle private constructor(
         configJson: String,
         isSystemDark: Boolean = false,
         restoreStateJson: String? = null,
-        navInsetBottomDp: Int = 0
+        navInsetBottomDp: Int = 0,
+        navInsetTopDp: Int = 0
     ): String {
         val extraLen = restoreStateJson?.length ?: 0
         val safeNavDp = navInsetBottomDp.coerceAtLeast(0)
-        return buildString(configJson.length + extraLen + 320) {
+        val safeTopDp = navInsetTopDp.coerceAtLeast(0)
+        return buildString(configJson.length + extraLen + 360) {
             if (!restoreStateJson.isNullOrBlank()) {
                 append("window.__TWITTER_RESTORE_STATE__ = ")
                 append(restoreStateJson)
                 append(";\n")
             }
-            append("window.__TWITTER_NAV_INSET_BOTTOM__ = ")
+            append("window.__TWITTER_NAV_INSET_TOP__ = ")
+            append(safeTopDp)
+            append(";\nwindow.__TWITTER_NAV_INSET_BOTTOM__ = ")
             append(safeNavDp)
             append(";\nwindow.__TWITTER_SYSTEM_DARK__ = ")
             append(isSystemDark)
@@ -64,10 +74,12 @@ class TwitterAssetBundle private constructor(
         }
     }
 
-    fun buildNavInsetScript(navInsetBottomDp: Int): String {
+    fun buildNavInsetScript(navInsetBottomDp: Int, navInsetTopDp: Int = 0): String {
         val safeNavDp = navInsetBottomDp.coerceAtLeast(0)
-        return "window.__TWITTER_NAV_INSET_BOTTOM__ = $safeNavDp;\n" +
-            "if (typeof window.__twSetNavInsetBottom === 'function') { window.__twSetNavInsetBottom($safeNavDp); }\n"
+        val safeTopDp = navInsetTopDp.coerceAtLeast(0)
+        return "window.__TWITTER_NAV_INSET_TOP__ = $safeTopDp;\n" +
+            "window.__TWITTER_NAV_INSET_BOTTOM__ = $safeNavDp;\n" +
+            "if (typeof window.__twSetNavInsets === 'function') { window.__twSetNavInsets($safeTopDp, $safeNavDp); }\n"
     }
 
     companion object {
@@ -99,10 +111,12 @@ class TwitterAssetBundle private constructor(
             val interceptorJs = readAsset(context, "twitter-interceptor.js")
             val themeJs = readAsset(context, "twitter-theme.js")
             val featuresJs = readAsset(context, "twitter-features.js")
+            val chromeJs = readAsset(context, "twitter-chrome.js")
+            val drawerJs = readAsset(context, "twitter-drawer.js")
             val viewportJs = readAsset(context, "twitter-viewport.js")
             val domJs = readAsset(context, "twitter-dom.js")
             val quotedCss = JSONObject.quote(readAsset(context, "twitter-clean.css"))
-            return TwitterAssetBundle(interceptorJs, themeJs, featuresJs, viewportJs, domJs, quotedCss)
+            return TwitterAssetBundle(interceptorJs, themeJs, featuresJs, chromeJs, drawerJs, viewportJs, domJs, quotedCss)
         }
 
         private fun readAsset(context: Context, name: String): String {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.SnackbarDuration
@@ -127,7 +128,7 @@ fun TwitterAppScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val (webViewInsets, navInsetBottomDp) = rememberWebViewEdgeToEdgeState(isFullscreenVideo = customVideoView != null)
+    val edgeToEdge = rememberWebViewEdgeToEdgeState(isFullscreenVideo = customVideoView != null)
     val initialUrl = remember(webViewEpoch) {
         if (webViewEpoch == 0) deepLinkUrl ?: TwitterWebController.DEFAULT_HOME_URL
         else controller.lastKnownUrl
@@ -287,7 +288,9 @@ fun TwitterAppScreen(
                     configJson = configJson,
                     preferDesktopUserAgent = preferDesktopUserAgent,
                     isSystemDark = systemDark,
-                    navInsetBottomDp = navInsetBottomDp,
+                    navInsetTopDp = edgeToEdge.topInsetDp,
+                    navInsetTopPx = edgeToEdge.topInsetPx,
+                    navInsetBottomDp = edgeToEdge.bottomInsetDp,
                     controller = controller,
                     onOpenSettings = { showSettingsSheet = true },
                     onShowLinkActions = { url -> longPressedLinkUrl = url },
@@ -320,7 +323,7 @@ fun TwitterAppScreen(
                     onWebViewAttached = { isWebViewAttached = true },
                     modifier = Modifier
                         .fillMaxSize()
-                        .windowInsetsPadding(webViewInsets)
+                        .windowInsetsPadding(edgeToEdge.webViewInsets)
                 )
             }
 
@@ -330,7 +333,7 @@ fun TwitterAppScreen(
                     onRetry = { triggerReload() },
                     modifier = Modifier
                         .fillMaxSize()
-                        .windowInsetsPadding(webViewInsets)
+                        .safeDrawingPadding()
                 )
             }
 
@@ -345,11 +348,7 @@ fun TwitterAppScreen(
                     .systemBarsPadding()
                     .imePadding()
                     .padding(
-                        bottom = if (FoldableLayoutPolicy.expectsWideViewport(
-                                configuration.screenWidthDp,
-                                currentLayoutState.isExpanded
-                            )
-                        ) 16.dp else 58.dp
+                        bottom = if (FoldableLayoutPolicy.expectsWideViewport(configuration.screenWidthDp, currentLayoutState.isExpanded)) 16.dp else 58.dp
                     )
             )
         }
