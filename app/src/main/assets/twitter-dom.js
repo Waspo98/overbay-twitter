@@ -89,7 +89,7 @@
                 twCleanNav: String(cfg.cleanBottomNav !== false), twBadgeMode: String(cfg.verifiedBadgeMode || "SHOW_ALL"),
                 twSurfaceOverride: surfaceOverride
             });
-            themeDirty = true;
+            themeDirty = navInsetsDirty = true;
         }
         if (surfaceOverride) {
             window.__TW_THEME__?.syncSurfaceStyleSheet?.(surfaceOverride, forceSurfaceSync || sigChanged);
@@ -345,8 +345,8 @@
         ensureStyleTag();
         syncDatasetAndTheme(cfg, fullScan);
         const effectiveCheckHeader = checkHeader || headerDirty;
-        const effectiveCheckNavInsets = checkNavInsets || headerDirty;
-        if (headerDirty) headerDirty = false;
+        const effectiveCheckNavInsets = checkNavInsets || headerDirty || navInsetsDirty;
+        headerDirty = navInsetsDirty = false;
         updateBrandLogos(cfg.classicTwitterBranding !== false, roots, fullScan, effectiveCheckHeader);
         rewriteUiTerminology(cfg.classicTwitterBranding !== false, roots, fullScan);
         if (effectiveCheckHeader) {

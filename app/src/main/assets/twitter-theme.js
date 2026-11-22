@@ -119,10 +119,14 @@
         const buckets = { base: [], glass: [], elev: [], hover: [], border: [] };
         let hasNew = false;
         const pushSel = (bucket, selText) => {
+            const guardClearGlass = bucket === "base" || bucket === "glass";
             for (const part of selText.split(",")) {
                 const s = part.trim();
                 if (!s || s.includes("tw-mod-")) continue;
-                const fullSel = /^(html|:root)\b/i.test(s) ? prefix : `${prefix} ${s}`;
+                let fullSel = /^(html|:root)\b/i.test(s) ? prefix : `${prefix} ${s}`;
+                if (guardClearGlass && fullSel !== prefix && !s.includes("::")) {
+                    fullSel = `${fullSel}:not([data-tw-top-bar-clear-glass="true"])`;
+                }
                 const key = `${bucket}\u0000${fullSel}`;
                 if (emittedSelectors.has(key)) continue;
                 emittedSelectors.add(key);

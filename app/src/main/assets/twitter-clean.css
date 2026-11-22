@@ -203,9 +203,13 @@ html[data-tw-surface-override="black"] [style*="background-color:rgb(21,32,43)"]
 html[data-tw-surface-override="black"] [style*="background-color: #15202b" i] { background-color: #000000 !important; }
 
 /* Auto-hide Bottom Tab Bar & Compose FAB on Downward Scroll */
+:root {
+    --tw-chrome-dur: 240ms;
+    --tw-chrome-ease: cubic-bezier(0.2, 0, 0, 1);
+}
 [data-testid="BottomBar"],
 [data-testid="FloatingActionButtonBase"] {
-    transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1), opacity 0.18s ease !important;
+    transition: transform var(--tw-chrome-dur) var(--tw-chrome-ease), opacity 0.18s ease !important;
     will-change: transform, opacity;
 }
 html:not([data-tw-bottom-hidden="true"]) [data-testid="BottomBar"],
@@ -237,20 +241,20 @@ html[data-tw-bottom-hidden="true"] [data-testid="FloatingActionButtonBase"] {
     background-color: var(--tw-status-glass-bg, rgba(0, 0, 0, 0.65));
     backdrop-filter: var(--tw-status-glass-blur, blur(12px));
     -webkit-backdrop-filter: var(--tw-status-glass-blur, blur(12px));
-    clip-path: inset(0 0 0px 0);
+    transform: translate3d(0, 0px, 0);
 }
 #tw-status-bar-glass[data-tw-glass-unified="true"] {
     z-index: var(--tw-glass-z, 3);
 }
 #tw-status-bar-glass[data-tw-glass-autohide="true"] {
-    transition: clip-path 0.22s cubic-bezier(0.2, 0, 0, 1);
-    will-change: clip-path;
+    transition: transform var(--tw-chrome-dur) var(--tw-chrome-ease);
+    will-change: transform;
 }
 html[data-tw-top-inset="true"] #tw-status-bar-glass {
     display: block;
 }
 html[data-tw-top-inset="true"][data-tw-bottom-hidden="true"] #tw-status-bar-glass[data-tw-glass-autohide="true"] {
-    clip-path: inset(0 0 var(--tw-top-hdr-h, 0px) 0);
+    transform: translate3d(0, calc(-1 * var(--tw-top-hdr-h, 0px)), 0);
 }
 html[data-tw-top-inset="true"]:has([data-testid="swipeToDismiss"]) #tw-status-bar-glass {
     display: none !important;
@@ -266,7 +270,7 @@ html[data-tw-top-inset="true"] [data-tw-top-bar-offset="true"] {
 html[data-tw-top-inset="true"] [data-tw-top-bar-unified-host="true"] {
     z-index: var(--tw-glass-z, 3) !important;
 }
-html[data-tw-top-inset="true"] [data-tw-top-bar-clear-glass="true"][data-tw-top-bar-clear-glass="true"] {
+html[data-tw-top-inset="true"] [data-tw-top-bar-clear-glass="true"][data-tw-top-bar-clear-glass="true"][data-tw-top-bar-clear-glass="true"] {
     background-color: transparent !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
@@ -275,27 +279,40 @@ html[data-tw-top-inset="true"] [data-tw-top-bar-clear-pad="true"] {
     padding-top: 0px !important;
 }
 html[data-tw-top-inset="true"] [data-tw-top-bar-reset-tf="true"] {
-    transform: translate3d(0, 0, 0) !important;
+    transform: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+}
+html[data-tw-top-inset="true"] [data-tw-top-bar-mask="true"] {
+    overflow: hidden !important;
+    overflow: clip !important;
+}
+html[data-tw-top-inset="true"][data-tw-bottom-hidden="true"] [data-tw-top-bar-mask="true"] {
+    pointer-events: none !important;
 }
 html[data-tw-top-inset="true"] [data-tw-top-bar-autohide="true"] {
-    transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1), clip-path 0.22s cubic-bezier(0.2, 0, 0, 1), opacity 0.16s ease !important;
+    transition: transform var(--tw-chrome-dur) var(--tw-chrome-ease), opacity 0.18s ease !important;
     will-change: transform, opacity;
 }
 html[data-tw-top-inset="true"]:not([data-tw-bottom-hidden="true"]) [data-tw-top-bar-autohide="true"] {
-    transform: translate3d(0, 0, 0) !important;
+    transform: translate3d(0, 0px, 0) !important;
     opacity: 1 !important;
-}
-html[data-tw-top-inset="true"]:not([data-tw-bottom-hidden="true"]) [data-tw-top-bar-autohide="true"][data-tw-top-bar-clip="true"] {
-    clip-path: inset(0% 0 0 0) !important;
 }
 html[data-tw-top-inset="true"][data-tw-bottom-hidden="true"] [data-tw-top-bar-autohide="true"] {
     transform: translate3d(0, calc(-100% - var(--tw-nav-inset-top, 0px) - 8px), 0) !important;
     opacity: 0 !important;
     pointer-events: none !important;
 }
-html[data-tw-top-inset="true"][data-tw-bottom-hidden="true"] [data-tw-top-bar-autohide="true"][data-tw-top-bar-clip="true"] {
+html[data-tw-top-inset="true"][data-tw-bottom-hidden="true"] [data-tw-top-bar-autohide="true"][data-tw-top-bar-masked="true"] {
     transform: translate3d(0, -100%, 0) !important;
-    clip-path: inset(100% 0 0 0) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+    #tw-status-bar-glass,
+    [data-tw-top-bar-autohide="true"],
+    [data-testid="BottomBar"],
+    [data-testid="FloatingActionButtonBase"] {
+        transition-duration: 0.01ms !important;
+    }
 }
 html[data-tw-top-inset="true"] #layers:has([data-testid="Drawer"], [role="dialog"], [role="menu"], [data-testid="Dropdown"]),
 html[data-tw-top-inset="true"] #layers > *:has([data-testid="Drawer"], [role="dialog"], [role="menu"], [data-testid="Dropdown"]),
