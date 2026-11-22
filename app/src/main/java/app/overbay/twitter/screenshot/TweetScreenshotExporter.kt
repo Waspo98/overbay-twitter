@@ -14,6 +14,7 @@ import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -27,12 +28,20 @@ object TweetScreenshotExporter {
     private const val MAX_CACHED_FILES = 6
     private val UNSAFE_CHARS_RE = Regex("[^A-Za-z0-9_-]")
 
+    private inline fun <T> runSuspendCatching(block: () -> T): Result<T> = try {
+        Result.success(block())
+    } catch (ce: CancellationException) {
+        throw ce
+    } catch (err: Throwable) {
+        Result.failure(err)
+    }
+
     suspend fun share(
         context: Context,
         bitmap: Bitmap,
         authorHandle: String,
         tweetId: String
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = runSuspendCatching {
         val uri = writeTempPng(context, bitmap, authorHandle, tweetId)
         withContext(Dispatchers.Main) {
             val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -53,7 +62,7 @@ object TweetScreenshotExporter {
         bitmap: Bitmap,
         authorHandle: String,
         tweetId: String
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = runSuspendCatching {
         val uri = writeTempPng(context, bitmap, authorHandle, tweetId)
         withContext(Dispatchers.Main) {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
@@ -68,7 +77,7 @@ object TweetScreenshotExporter {
         authorHandle: String,
         tweetId: String
     ): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
+        runSuspendCatching {
             val fileName = "${buildFilenameBase(authorHandle, tweetId)}.png"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val resolver = context.contentResolver

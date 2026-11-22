@@ -87,7 +87,7 @@ fun TweetScreenshotHost(
     var captured by remember { mutableStateOf<CapturedTweetScreenshot?>(null) }
 
     DisposableEffect(controller) {
-        controller.onRequestTweetScreenshot = { _ ->
+        controller.onRequestTweetScreenshot = {
             if (!isCapturing) {
                 val hostActivity = latestActivity
                 val webView = controller.webView
@@ -204,7 +204,8 @@ private fun TweetScreenshotSheet(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 140.dp, max = 380.dp),
+                    .weight(1f, fill = false)
+                    .heightIn(min = 120.dp, max = 380.dp),
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerLow
             ) {
@@ -323,7 +324,7 @@ private fun TweetScreenshotSheet(
                 ) {
                     Icon(AppIcons.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.size(6.dp))
-                    Text("Share", fontWeight = FontWeight.SemiBold)
+                    Text("Share", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                 }
 
                 FilledTonalButton(
@@ -339,7 +340,7 @@ private fun TweetScreenshotSheet(
                 ) {
                     Icon(AppIcons.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.size(6.dp))
-                    Text("Copy", fontWeight = FontWeight.Medium)
+                    Text("Copy", fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                 }
 
                 FilledTonalButton(
@@ -354,7 +355,7 @@ private fun TweetScreenshotSheet(
                 ) {
                     Icon(AppIcons.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.size(6.dp))
-                    Text("Save", fontWeight = FontWeight.Medium)
+                    Text("Save", fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                 }
             }
         }

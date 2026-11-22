@@ -413,6 +413,7 @@ class TwitterWebEngineTest {
         assertTrue(css.contains(".tw-mod-shot-btn"))
         assertTrue(css.contains("data-tw-capturing=\"true\""))
         assertTrue(css.contains("data-tw-capture-target=\"true\""))
+        assertTrue(css.indexOf("prefers-reduced-motion: reduce") < css.indexOf("html[data-tw-capturing=\"true\"]"))
         assertTrue(css.contains(".tw-mod-dark-subrow"))
         assertTrue(css.contains("[role=\"group\"] > div:has(> a[href*=\"/analytics\"])"))
         assertTrue(css.contains("#tw-status-bar-glass"))

@@ -15,6 +15,7 @@ import app.overbay.twitter.ui.theme.TwitterSurfaceTheme
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -218,11 +219,10 @@ object TweetScreenshotCapturer {
                 )
             )
         } catch (err: Throwable) {
+            if (err is CancellationException) throw err
             Result.failure(err)
         } finally {
-            runCatching {
-                evaluateJs(webView, "window.__TW_SCREENSHOT__ && window.__TW_SCREENSHOT__.end();")
-            }
+            runCatching { webView.evaluateJavascript("window.__TW_SCREENSHOT__ && window.__TW_SCREENSHOT__.end();", null) }
         }
     }
 
@@ -250,7 +250,7 @@ object TweetScreenshotCapturer {
         // Software fallback if PixelCopy fails on an unusual surface state.
         return runCatching {
             val canvas = Canvas(dest)
-            canvas.translate(-bounds.leftInView.toFloat(), -bounds.topInView.toFloat())
+            canvas.translate(-(webView.scrollX + bounds.leftInView).toFloat(), -(webView.scrollY + bounds.topInView).toFloat())
             webView.draw(canvas)
             dest
         }.getOrElse {

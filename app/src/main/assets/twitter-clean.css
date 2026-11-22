@@ -134,26 +134,6 @@ html[data-tw-badge-mode="HIDE_PAID_BLUE"] [data-testid="icon-verified"][data-tw-
     stroke-width: 1.85; stroke-linecap: round; stroke-linejoin: round;
 }
 
-/* Clean Tweet Screenshot Capture Mode (instant hide of chrome, carets & mod buttons) */
-html[data-tw-capturing="true"] #tw-status-bar-glass,
-html[data-tw-capturing="true"] [data-tw-capture-hide="true"],
-html[data-tw-capturing="true"] [data-testid="BottomBar"],
-html[data-tw-capturing="true"] [data-testid="FloatingActionButtonBase"],
-html[data-tw-capturing="true"] [data-testid="toast"] {
-    opacity: 0 !important;
-    visibility: hidden !important;
-    transition: none !important;
-    animation: none !important;
-    pointer-events: none !important;
-}
-html[data-tw-capturing="true"] [data-tw-capture-target="true"] .tw-mod-dl-btn,
-html[data-tw-capturing="true"] [data-tw-capture-target="true"] .tw-mod-shot-btn {
-    display: none !important;
-}
-html[data-tw-capturing="true"] [data-tw-capture-target="true"] [data-testid="caret"] {
-    visibility: hidden !important;
-}
-
 /* Injected Fullscreen Photo Lightbox Download Button */
 .tw-mod-img-dl-btn {
     position: fixed; right: 16px; bottom: 76px; z-index: 9999;
@@ -320,7 +300,7 @@ html[data-tw-top-inset="true"] [data-tw-top-bar-autohide="true"] {
     transition: transform var(--tw-chrome-dur) var(--tw-chrome-ease), opacity 0.18s ease !important;
     will-change: transform, opacity;
 }
-html[data-tw-top-inset="true"]:not([data-tw-bottom-hidden="true"]) [data-tw-top-bar-autohide="true"] {
+html[data-tw-top-inset="true"]:not([data-tw-bottom-hidden="true"]):not([data-tw-capturing="true"]) [data-tw-top-bar-autohide="true"] {
     transform: translate3d(0, 0px, 0) !important;
     opacity: 1 !important;
 }
@@ -339,6 +319,26 @@ html[data-tw-top-inset="true"][data-tw-bottom-hidden="true"] [data-tw-top-bar-au
     [data-testid="FloatingActionButtonBase"] {
         transition-duration: 0.01ms !important;
     }
+}
+
+/* Clean Tweet Screenshot Capture Mode (placed after chrome transitions so instant hide always wins) */
+html[data-tw-capturing="true"] #tw-status-bar-glass,
+html[data-tw-capturing="true"] [data-tw-capture-hide="true"],
+html[data-tw-capturing="true"] [data-testid="BottomBar"],
+html[data-tw-capturing="true"] [data-testid="FloatingActionButtonBase"],
+html[data-tw-capturing="true"] [data-testid="toast"] {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    transition: none !important;
+    animation: none !important;
+    pointer-events: none !important;
+}
+html[data-tw-capturing="true"] [data-tw-capture-target="true"] .tw-mod-dl-btn,
+html[data-tw-capturing="true"] [data-tw-capture-target="true"] .tw-mod-shot-btn {
+    display: none !important;
+}
+html[data-tw-capturing="true"] [data-tw-capture-target="true"] [data-testid="caret"] {
+    visibility: hidden !important;
 }
 html[data-tw-top-inset="true"] #layers:has([data-testid="Drawer"], [role="dialog"], [role="menu"], [data-testid="Dropdown"]),
 html[data-tw-top-inset="true"] #layers > *:has([data-testid="Drawer"], [role="dialog"], [role="menu"], [data-testid="Dropdown"]),

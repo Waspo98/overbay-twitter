@@ -173,7 +173,7 @@
             }
         }
 
-        const meta = activeMeta || resolveTweetMeta(activeArticle);
+        const meta = activeMeta || (activeMeta = resolveTweetMeta(activeArticle));
         return {
             rectLeft: rect.left,
             rectTop: rect.top,
@@ -199,8 +199,8 @@
         if (savedState) end();
         captureStartedAt = now;
         activeArticle = article;
-        activeMeta = resolveTweetMeta(article);
-        window.TwitterBridge?.requestTweetScreenshot?.(JSON.stringify(activeMeta));
+        activeMeta = null;
+        window.TwitterBridge?.requestTweetScreenshot?.();
     }
 
     function begin() {

@@ -158,7 +158,7 @@ class TwitterAssetBundle internal constructor(
                     setThemeMode: (mode) => post({ type: "setThemeMode", mode: String(mode || "") }),
                     setAutoDarkVariant: (variant) => post({ type: "setAutoDarkVariant", variant: String(variant || "") }),
                     reportStatsDelta: (ads, clutter) => post({ type: "reportStatsDelta", ads: Number(ads) || 0, clutter: Number(clutter) || 0 }),
-                    requestTweetScreenshot: (metaJson) => post({ type: "requestTweetScreenshot", metaJson: String(metaJson || "") })
+                    requestTweetScreenshot: () => post({ type: "requestTweetScreenshot" })
                 };
             })();
         """.trimIndent()
