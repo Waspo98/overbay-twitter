@@ -66,8 +66,8 @@ android {
         applicationId = if (isBeta) "app.overbay.twitter.beta" else "app.overbay.twitter"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = if (isBeta) "1.2.1-beta" else "1.2.1"
+        versionCode = 8
+        versionName = if (isBeta) "1.2.2-beta" else "1.2.2"
     }
 
     sourceSets {
