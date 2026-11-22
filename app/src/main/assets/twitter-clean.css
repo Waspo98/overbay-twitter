@@ -202,27 +202,35 @@ html[data-tw-surface-override="black"] [style*="background-color: rgb(21, 32, 43
 html[data-tw-surface-override="black"] [style*="background-color:rgb(21,32,43)"],
 html[data-tw-surface-override="black"] [style*="background-color: #15202b" i] { background-color: #000000 !important; }
 
+/* Auto-hide Bottom Tab Bar & Compose FAB on Downward Scroll */
+[data-testid="BottomBar"],
+[data-testid="FloatingActionButtonBase"] {
+    transition: transform 0.22s cubic-bezier(0.2, 0, 0, 1), opacity 0.18s ease !important;
+    will-change: transform, opacity;
+}
+html:not([data-tw-bottom-hidden="true"]) [data-testid="BottomBar"],
+html:not([data-tw-bottom-hidden="true"]) [data-testid="FloatingActionButtonBase"],
+html:not([data-tw-bottom-hidden="true"]) [data-testid="FloatingActionButtons_Tweet_Button"] {
+    opacity: 1 !important;
+}
+html[data-tw-bottom-hidden="true"] [data-testid="BottomBar"] {
+    opacity: 0 !important;
+    transform: translate3d(0, calc(100% + 4px), 0) !important;
+    pointer-events: none !important;
+}
+html[data-tw-bottom-hidden="true"] [data-testid="FloatingActionButtonBase"] {
+    opacity: 0 !important;
+    transform: translate3d(0, 160px, 0) scale(0.85) !important;
+    pointer-events: none !important;
+}
+
 /* Edge-to-Edge Transparent System Navigation Bar Support */
-html[data-tw-nav-inset="true"] [data-tw-bottom-bar-host="true"] {
-    bottom: 0px !important;
-    height: auto !important;
-    min-height: 0 !important;
-    padding-bottom: var(--tw-nav-inset-bottom, 0px) !important;
+html[data-tw-nav-inset="true"] [data-tw-bottom-bar-surface="true"] {
+    height: calc(var(--tw-bottom-bar-base-h, 53px) + var(--tw-nav-inset-bottom, 0px)) !important;
+    min-height: calc(var(--tw-bottom-bar-base-h, 53px) + var(--tw-nav-inset-bottom, 0px)) !important;
+    max-height: none !important;
+    padding-bottom: calc(var(--tw-bottom-bar-orig-pad, 0px) + var(--tw-nav-inset-bottom, 0px)) !important;
     box-sizing: border-box !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    backdrop-filter: blur(12px) !important;
-}
-html[data-tw-nav-inset="true"][data-tw-surface-theme="light"] [data-tw-bottom-bar-host="true"] {
-    background-color: rgba(255, 255, 255, 0.85) !important;
-}
-html[data-tw-nav-inset="true"][data-tw-surface-theme="dim"] [data-tw-bottom-bar-host="true"] {
-    background-color: rgba(21, 32, 43, 0.80) !important;
-}
-html[data-tw-nav-inset="true"][data-tw-surface-theme="black"] [data-tw-bottom-bar-host="true"] {
-    background-color: rgba(0, 0, 0, 0.78) !important;
-}
-html[data-tw-nav-inset="true"] [data-tw-bottom-bar-clear="true"] {
-    background-color: transparent !important;
 }
 html[data-tw-nav-inset="true"] [data-tw-fixed-bottom-pad="true"] {
     bottom: 0px !important;
