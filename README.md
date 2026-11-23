@@ -6,9 +6,7 @@ An open-source Android `WebView` wrapper for `https://x.com` that restores class
 
 ## Download
 
-Grab the latest pre-built Android APK from GitHub Releases:
-
-- [Download Twitter-debug.apk](https://github.com/Waspo98/overbay-twitter/releases/download/debug-latest/Twitter-debug.apk)
+Grab the latest signed Android APK from [GitHub Releases](https://github.com/Waspo98/overbay-twitter/releases/latest), or download the rolling debug build ([Twitter-debug.apk](https://github.com/Waspo98/overbay-twitter/releases/download/debug-latest/Twitter-debug.apk)).
 
 Requires Android 8.0+ (API 26+). Because the APK is sideloaded outside Google Play, Android will ask you to allow installs from your browser or file manager.
 
@@ -18,7 +16,7 @@ Everything runs locally on your phone inside the app's `WebView` and interceptio
 
 ### Ad and Clutter Removal
 - **GraphQL ad filtering:** Removes promoted tweets and suggestion carousels ("Who to follow", "Topics to follow", "Communities to join") from `/i/api/graphql/*` responses before React renders them, avoiding empty gaps while scrolling.
-- **Tracker blocking:** Blocks telemetry and ad endpoints at the `WebViewClient` layer (including `/i/api/1.1/jot/`, `/i/adsct`, `ads-twitter.com`, `ads.x.com`, and `analytics.twitter.com`).
+- **Tracker and Grok blocking:** Blocks telemetry and ad endpoints (`/i/api/1.1/jot/`, `/i/adsct`, `ads-twitter.com`, `ads.x.com`, `analytics.twitter.com`) along with Grok API requests (`/i/api/2/grok/`, `/i/api/graphql/*/Grok*`) at the `WebViewClient` layer.
 - **Grok and upsells:** Hides Grok tabs, inline tweet buttons, summaries, profile Subscribe buttons, and Premium prompts.
 
 ### Branding and Interface
@@ -26,6 +24,7 @@ Everything runs locally on your phone inside the app's `WebView` and interceptio
 - **Counters and tabs:** Optionally hides view counts, bookmark counts, and extra bottom-bar tabs (Grok, Communities, Spaces, Jobs).
 - **Verified badges:** Choose between showing all checkmarks, hiding paid blue badges while keeping affiliate and legacy labels, or hiding all badges.
 - **Theme control:** Pick Follow Device (Auto), Light, Dim (`#15202B`), or Lights Out (`#000000`) from Mod Settings or the slide-out drawer, choose Dim or Lights Out for Auto dark mode, and keep Android system bars, native sheets, and Chrome Custom Tabs in sync.
+- **Edge-to-edge layout:** Renders under a frosted status bar and transparent navigation bar, and auto-hides the bottom tab bar and compose button while scrolling down.
 
 ### Feeds and Filtering
 - **Home feed tabs:** Pick a default Home tab (`For you`, `Following`, or a personal List), reorder or hide tabs, hide suggested topic tabs, and optionally hide the `+` button.
@@ -35,6 +34,7 @@ Everything runs locally on your phone inside the app's `WebView` and interceptio
 
 ### Media and Links
 - **1-tap downloads:** Adds download buttons for highest-bitrate `.mp4` videos/GIFs on tweets and full-resolution photos in the image viewer, saving to `Downloads/Twitter` via Android `DownloadManager`.
+- **Tweet screenshots:** Adds a capture button to each tweet's action bar that hides floating bars and stitches tall tweets into one PNG. Choose Clean Card, Framed, or Tight framing, toggle engagement metrics, and share, copy, or save to `Pictures/Twitter`.
 - **Original-resolution photos:** Upgrades full-screen photo viewer images to `name=orig` automatically.
 - **Autoplay control:** Optionally pauses timeline videos and GIFs until you tap play.
 - **Clean links:** Unwraps `t.co` redirects, strips tracking parameters (`utm_*`, `fbclid`, `gclid`, and similar), and opens links in Chrome Custom Tabs or your default browser. Long-pressing an external link opens actions to view the clean URL, open it in Archive.today (`archive.ph`), copy, or share.
